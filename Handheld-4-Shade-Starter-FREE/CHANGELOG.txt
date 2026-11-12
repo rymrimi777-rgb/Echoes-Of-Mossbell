@@ -1,0 +1,3 @@
+Update - November 2026
+
+- New aseprite/ folder: 8 Aseprite source files for the animated sprites, with every animation as a named tag and frame timings set, plus separate Outline and Colour layers.

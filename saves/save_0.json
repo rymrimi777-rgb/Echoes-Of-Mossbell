@@ -1,0 +1,39 @@
+{
+  "timestamp": 1794505571.684163,
+  "player_x": 160,
+  "player_y": 144,
+  "player_dir": "down",
+  "current_map": "grotto",
+  "inventory": {
+    "bread": 1,
+    "apple": 1,
+    "gold_key": 1,
+    "sword": 1,
+    "shield": 1,
+    "coins": 1,
+    "crystal": 1
+  },
+  "quests": {
+    "main": {
+      "stage": 6,
+      "completed": true
+    },
+    "herbs": {
+      "stage": 0,
+      "completed": false
+    },
+    "ring": {
+      "stage": 0,
+      "completed": false
+    }
+  },
+  "flags": {
+    "house_apple": true,
+    "elder_key": true,
+    "dungeon_sword": true,
+    "dungeon_shield": true,
+    "dungeon_elixir": true,
+    "dungeon_coins": true
+  },
+  "play_time": 0.0
+}

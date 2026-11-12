@@ -1,0 +1,1166 @@
+[
+  {
+    "key": "special/smiley",
+    "preview_cell": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/a",
+    "preview_cell": {
+      "x": 16,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real"
+    }
+  },
+  {
+    "key": "letters/b",
+    "preview_cell": {
+      "x": 32,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real"
+    }
+  },
+  {
+    "key": "letters/c",
+    "preview_cell": {
+      "x": 48,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/d",
+    "preview_cell": {
+      "x": 64,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/e",
+    "preview_cell": {
+      "x": 80,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/f",
+    "preview_cell": {
+      "x": 96,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/g",
+    "preview_cell": {
+      "x": 112,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "special/enter",
+    "preview_cell": {
+      "x": 128,
+      "y": 0,
+      "w": 32,
+      "h": 16
+    },
+    "frame_size": [
+      32,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/h",
+    "preview_cell": {
+      "x": 0,
+      "y": 16,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/i",
+    "preview_cell": {
+      "x": 16,
+      "y": 16,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/j",
+    "preview_cell": {
+      "x": 32,
+      "y": 16,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/k",
+    "preview_cell": {
+      "x": 48,
+      "y": 16,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/l",
+    "preview_cell": {
+      "x": 64,
+      "y": 16,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/m",
+    "preview_cell": {
+      "x": 80,
+      "y": 16,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/n",
+    "preview_cell": {
+      "x": 96,
+      "y": 16,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/o",
+    "preview_cell": {
+      "x": 112,
+      "y": 16,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "special/shift",
+    "preview_cell": {
+      "x": 128,
+      "y": 16,
+      "w": 32,
+      "h": 16
+    },
+    "frame_size": [
+      32,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/p",
+    "preview_cell": {
+      "x": 0,
+      "y": 32,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/q",
+    "preview_cell": {
+      "x": 16,
+      "y": 32,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/r",
+    "preview_cell": {
+      "x": 32,
+      "y": 32,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/s",
+    "preview_cell": {
+      "x": 48,
+      "y": 32,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/t",
+    "preview_cell": {
+      "x": 64,
+      "y": 32,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/u",
+    "preview_cell": {
+      "x": 80,
+      "y": 32,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/v",
+    "preview_cell": {
+      "x": 96,
+      "y": 32,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/w",
+    "preview_cell": {
+      "x": 112,
+      "y": 32,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "letters/x",
+    "preview_cell": {
+      "x": 0,
+      "y": 48,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real (from the pack's sprite sheet)"
+    },
+    "notes": [
+      "X-button.png strip has a duplicate of mid as its pressed frame; the real pressed frame comes from the pack's own sprite sheet"
+    ]
+  },
+  {
+    "key": "letters/y",
+    "preview_cell": {
+      "x": 16,
+      "y": 48,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real"
+    }
+  },
+  {
+    "key": "letters/z",
+    "preview_cell": {
+      "x": 32,
+      "y": 48,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/period",
+    "preview_cell": {
+      "x": 48,
+      "y": 48,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/comma",
+    "preview_cell": {
+      "x": 64,
+      "y": 48,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/question",
+    "preview_cell": {
+      "x": 80,
+      "y": 48,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/slash",
+    "preview_cell": {
+      "x": 96,
+      "y": 48,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/backslash",
+    "preview_cell": {
+      "x": 112,
+      "y": 48,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/semicolon",
+    "preview_cell": {
+      "x": 0,
+      "y": 64,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/grave",
+    "preview_cell": {
+      "x": 16,
+      "y": 64,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/bracket_left",
+    "preview_cell": {
+      "x": 32,
+      "y": 64,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/bracket_right",
+    "preview_cell": {
+      "x": 48,
+      "y": 64,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/equals",
+    "preview_cell": {
+      "x": 64,
+      "y": 64,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/plus",
+    "preview_cell": {
+      "x": 80,
+      "y": 64,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/minus",
+    "preview_cell": {
+      "x": 96,
+      "y": 64,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "symbols/tilde",
+    "preview_cell": {
+      "x": 112,
+      "y": 64,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "arrows/arrow_up",
+    "preview_cell": {
+      "x": 0,
+      "y": 80,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "arrows/arrow_down",
+    "preview_cell": {
+      "x": 16,
+      "y": 80,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "arrows/arrow_left",
+    "preview_cell": {
+      "x": 32,
+      "y": 80,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "arrows/arrow_right",
+    "preview_cell": {
+      "x": 48,
+      "y": 80,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f1",
+    "preview_cell": {
+      "x": 64,
+      "y": 80,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f2",
+    "preview_cell": {
+      "x": 80,
+      "y": 80,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f3",
+    "preview_cell": {
+      "x": 96,
+      "y": 80,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f4",
+    "preview_cell": {
+      "x": 112,
+      "y": 80,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f5",
+    "preview_cell": {
+      "x": 0,
+      "y": 96,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f6",
+    "preview_cell": {
+      "x": 16,
+      "y": 96,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f7",
+    "preview_cell": {
+      "x": 32,
+      "y": 96,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f8",
+    "preview_cell": {
+      "x": 48,
+      "y": 96,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f9",
+    "preview_cell": {
+      "x": 64,
+      "y": 96,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f10",
+    "preview_cell": {
+      "x": 80,
+      "y": 96,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f11",
+    "preview_cell": {
+      "x": 96,
+      "y": 96,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "function/f12",
+    "preview_cell": {
+      "x": 112,
+      "y": 96,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "derived",
+      "pressed": "derived"
+    }
+  },
+  {
+    "key": "dpad/up",
+    "preview_cell": {
+      "x": 0,
+      "y": 112,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real"
+    }
+  },
+  {
+    "key": "dpad/right",
+    "preview_cell": {
+      "x": 16,
+      "y": 112,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real"
+    }
+  },
+  {
+    "key": "dpad/down",
+    "preview_cell": {
+      "x": 32,
+      "y": 112,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real"
+    }
+  },
+  {
+    "key": "dpad/left",
+    "preview_cell": {
+      "x": 48,
+      "y": 112,
+      "w": 16,
+      "h": 16
+    },
+    "frame_size": [
+      16,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real"
+    },
+    "notes": [
+      "real mid frame has 1 stray outline pixel at top-right (kept as in the pack)"
+    ]
+  },
+  {
+    "key": "system/select",
+    "preview_cell": {
+      "x": 64,
+      "y": 112,
+      "w": 32,
+      "h": 16
+    },
+    "frame_size": [
+      32,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real"
+    },
+    "notes": [
+      "frames taken from the pack's own system strip"
+    ]
+  },
+  {
+    "key": "system/start",
+    "preview_cell": {
+      "x": 96,
+      "y": 112,
+      "w": 32,
+      "h": 16
+    },
+    "frame_size": [
+      32,
+      16
+    ],
+    "frames": {
+      "idle": "real",
+      "mid": "real",
+      "pressed": "real"
+    },
+    "notes": [
+      "frames taken from the pack's own system strip"
+    ]
+  }
+]
