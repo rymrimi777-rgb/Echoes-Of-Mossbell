@@ -7,3 +7,5 @@ dist/
 *.log
 .buildozer/
 bin/
+*.zip
+
