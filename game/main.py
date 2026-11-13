@@ -2,7 +2,7 @@
 Echoes of Mossbell – A Retro Handheld RPG
 Main Game Engine, State Machine, Map Transitions, and Enhanced Input Integration.
 """
-import pygame, sys, os, time
+import pygame, sys, os, time, asyncio
 
 # Ensure project root is in sys.path
 if getattr(sys, "frozen", False):
@@ -379,7 +379,7 @@ class Game:
         self.quest_mgr.start("ring")
 
     # ---- Main Loop ---------------------------------------------------------
-    def run(self):
+    async def run(self):
         while self.running:
             dt_ms = self.clock.tick(FPS)
             if dt_ms > 50:
@@ -388,6 +388,7 @@ class Game:
             self._handle_events()
             self._update(dt_ms)
             self._draw()
+            await asyncio.sleep(0)
 
         pygame.quit()
 
@@ -667,9 +668,13 @@ class Game:
         pygame.display.flip()
 
 
-def main():
+async def async_main():
     game = Game()
-    game.run()
+    await game.run()
+
+
+def main():
+    asyncio.run(async_main())
 
 
 if __name__ == "__main__":

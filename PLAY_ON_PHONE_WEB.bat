@@ -17,3 +17,4 @@ echo ================================================================
 echo.
 python -m http.server 8000 --directory build\web --bind 0.0.0.0
 pause
+
