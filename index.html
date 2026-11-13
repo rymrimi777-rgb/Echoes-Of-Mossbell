@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<script src="https://pygame-web.github.io/cdn/0.9.3/pythons.js" type="module" id="site" data-python="python3.12" data-LINES="42" data-COLUMNS="132" data-os="vtx,snd,gui" async defer>#<!--
+
+print("""
+===================================================
+ Echoes of Mossbell - A Retro Handheld RPG (HTML5)
+ Optimized WebAssembly Build via Pygbag 0.9.3
+===================================================
+""")
+
+import sys
+import asyncio
+import platform
+import json
+from pathlib import Path
+
+async def custom_site():
+    import embed
+    platform.document.body.style.background = "#091b1d"
+    platform.window.transfer.hidden = true
+    platform.window.canvas.style.visibility = "visible"
+
+    bundle = "game"
+    appdir = Path(f"/data/data/{bundle}")
+    appdir.mkdir()
+
+    # Unpack compressed WebAssembly game filesystem
+    import tarfile
+    async with platform.fopen("game.tar.gz", "rb") as archive:
+        tar = tarfile.open(fileobj=archive, mode="r:gz")
+        tar.extractall(path=appdir.as_posix(), filter='tar')
+        tar.close()
+
+    platform.run_main(PyConfig, loaderhome=appdir / "assets", loadermain=None)
+
+    while embed.counter() < 0:
+        await asyncio.sleep(0.1)
+
+    main = appdir / "assets" / "main.py"
+
+    # User Media Engagement check for audio policy
+    if not platform.window.MM.UME:
+        __import__(__name__).__file__ = main
+        msg = "Ready to start ! Please click/touch page"
+        platform.window.infobox.innerText = msg
+
+        while not platform.window.MM.UME:
+            await asyncio.sleep(0.1)
+
+    await TopLevel_async_handler.start_toplevel(platform.shell, console=window.python.config.debug)
+    __import__(__name__).__file__ = main
+
+    def ui_callback(pkg):
+        platform.window.infobox.innerText = f"Installing {pkg}..."
+
+    await shell.source(main, callback=ui_callback)
+
+    platform.window.infobox.style.display = "none"
+    platform.window.config.gui_divider = 1
+    platform.window.window_resize()
+    print("Echoes of Mossbell: Game engine initialized successfully!")
+    shell.interactive()
+
+asyncio.run(custom_site())
+
+# BEGIN BLOCK
+# --></script>
+<head>
+    <title>Echoes of Mossbell — Play Online & Android APK</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f380f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="icon" type="image/png" href="favicon.png">
+
+    <script type="application/javascript">
+    config = {
+        xtermjs: "0",
+        _sdl2: "canvas",
+        user_canvas: 0,
+        user_canvas_managed: 0,
+        gui_divider: 1,
+        ume_block: 1,
+        can_close: 0,
+        archive: "game",
+        gui_debug: 0,
+        cdn: "https://pygame-web.github.io/cdn/0.9.3/",
+        autorun: 0,
+        PYBUILD: "3.12",
+        fb_ar: 1.11,
+        fb_width: "640",
+        fb_height: "576"
+    };
+    </script>
+
+    <style>
+        :root {
+            --gb-darkest: #0f380f;
+            --gb-dark: #306230;
+            --gb-light: #8bac0f;
+            --gb-lightest: #9bbc0f;
+            --bg-deep: #091b1d;
+            --bezel: #152215;
+            --bezel-border: #2d422d;
+            --text-glow: #9bbc0f;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--gb-lightest);
+            font-family: 'Press Start 2P', monospace, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Top Bar */
+        header.top-bar {
+            width: 100%;
+            background: linear-gradient(180deg, #121c12 0%, #0c140c 100%);
+            border-bottom: 2px solid var(--gb-dark);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand img {
+            width: 28px;
+            height: 28px;
+            image-rendering: pixelated;
+        }
+
+        .brand h1 {
+            font-size: 13px;
+            letter-spacing: 1px;
+            color: var(--gb-lightest);
+            text-shadow: 0 0 6px rgba(155, 188, 15, 0.5);
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tab-btn {
+            background: var(--gb-darkest);
+            border: 2px solid var(--gb-dark);
+            color: var(--gb-lightest);
+            padding: 8px 14px;
+            font-family: inherit;
+            font-size: 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover {
+            border-color: var(--gb-lightest);
+            background: var(--gb-dark);
+        }
+
+        .tab-btn.active {
+            background: var(--gb-lightest);
+            color: var(--gb-darkest);
+            border-color: var(--gb-light);
+            box-shadow: 0 0 10px rgba(155, 188, 15, 0.6);
+        }
+
+        /* Main Viewport Container */
+        main.container {
+            flex: 1;
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            position: relative;
+        }
+
+        /* Game Boy Screen Frame */
+        .console-frame {
+            position: relative;
+            background: var(--bezel);
+            border: 4px solid var(--bezel-border);
+            border-radius: 12px 12px 24px 24px;
+            padding: 14px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.8), inset 0 2px 4px rgba(255,255,255,0.08);
+            width: 100%;
+            max-width: 668px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .frame-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 8px;
+            color: var(--gb-dark);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid #1c2b1c;
+            padding-bottom: 4px;
+        }
+
+        .battery-led {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff3333;
+            box-shadow: 0 0 6px #ff3333;
+            margin-right: 4px;
+            vertical-align: middle;
+            transition: background 0.3s;
+        }
+
+        .battery-led.ready {
+            background: #33ff33;
+            box-shadow: 0 0 8px #33ff33;
+        }
+
+        /* Screen Viewport & Canvas */
+        .screen-viewport {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 160 / 144;
+            max-height: 75vh;
+            background: var(--gb-lightest);
+            border: 3px solid var(--gb-darkest);
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas.emscripten {
+            width: 100%;
+            height: 100%;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            background: transparent;
+        }
+
+        /* Custom Retro Loading Overlay */
+        #custom-loader {
+            position: absolute;
+            inset: 0;
+            background: #0f380f;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 50;
+            text-align: center;
+            transition: opacity 0.4s ease;
+        }
+
+        #custom-loader.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader-title {
+            font-size: 14px;
+            margin-bottom: 16px;
+            color: var(--gb-lightest);
+            text-shadow: 0 0 8px rgba(155, 188, 15, 0.8);
+        }
+
+        .stage-badge {
+            font-size: 9px;
+            background: var(--gb-dark);
+            color: var(--gb-lightest);
+            padding: 4px 10px;
+            border-radius: 4px;
+            margin-bottom: 14px;
+            border: 1px solid var(--gb-light);
+        }
+
+        /* Segmented Retro Progress Bar */
+        .progress-box {
+            width: 80%;
+            max-width: 320px;
+            background: #081d08;
+            border: 2px solid var(--gb-light);
+            border-radius: 4px;
+            height: 24px;
+            padding: 3px;
+            margin-bottom: 12px;
+            position: relative;
+        }
+
+        #custom-progress-bar {
+            width: 0%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                90deg,
+                var(--gb-lightest),
+                var(--gb-lightest) 8px,
+                var(--gb-light) 8px,
+                var(--gb-light) 12px
+            );
+            transition: width 0.2s ease;
+            box-shadow: 0 0 8px rgba(155, 188, 15, 0.7);
+        }
+
+        .progress-meta {
+            font-size: 8px;
+            color: var(--gb-light);
+            margin-bottom: 20px;
+        }
+
+        /* Tap to start button */
+        #tap-to-start-btn {
+            display: none;
+            background: var(--gb-lightest);
+            color: var(--gb-darkest);
+            border: 3px solid var(--gb-darkest);
+            padding: 12px 24px;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 6px;
+            box-shadow: 0 4px 0 var(--gb-dark), 0 0 15px rgba(155, 188, 15, 0.9);
+            animation: pulse-glow 1.2s infinite alternate;
+        }
+
+        #tap-to-start-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 var(--gb-dark);
+        }
+
+        @keyframes pulse-glow {
+            from { box-shadow: 0 4px 0 var(--gb-dark), 0 0 10px rgba(155, 188, 15, 0.6); }
+            to { box-shadow: 0 4px 0 var(--gb-dark), 0 0 22px rgba(155, 188, 15, 1.0); }
+        }
+
+        /* Download APK Panel */
+        #download-panel {
+            display: none;
+            width: 100%;
+            background: #101a10;
+            border: 3px solid var(--gb-dark);
+            border-radius: 8px;
+            padding: 24px;
+            margin-top: 10px;
+        }
+
+        #download-panel.active {
+            display: block;
+        }
+
+        .apk-card {
+            background: #091309;
+            border: 2px solid var(--gb-light);
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .apk-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .apk-card h2 {
+            font-size: 13px;
+            color: var(--gb-lightest);
+        }
+
+        .apk-badge {
+            background: var(--gb-dark);
+            color: var(--gb-lightest);
+            font-size: 8px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--gb-light);
+        }
+
+        .apk-features {
+            list-style: none;
+            font-size: 9px;
+            line-height: 1.8;
+            color: #b5d5b5;
+        }
+
+        .apk-features li::before {
+            content: "✔ ";
+            color: var(--gb-lightest);
+        }
+
+        .download-action-btn {
+            background: var(--gb-lightest);
+            color: var(--gb-darkest);
+            text-decoration: none;
+            padding: 14px 20px;
+            font-size: 11px;
+            font-weight: bold;
+            text-align: center;
+            border-radius: 6px;
+            box-shadow: 0 4px 0 var(--gb-dark);
+            display: inline-block;
+            transition: all 0.2s;
+        }
+
+        .download-action-btn:hover {
+            background: #bbf41b;
+            box-shadow: 0 4px 12px rgba(155, 188, 15, 0.8);
+        }
+
+        .install-guide {
+            font-size: 8px;
+            line-height: 1.8;
+            color: #8da48d;
+            background: #0b140b;
+            padding: 14px;
+            border-radius: 4px;
+            border-left: 3px solid var(--gb-light);
+        }
+
+        .install-guide h3 {
+            font-size: 9px;
+            color: var(--gb-lightest);
+            margin-bottom: 6px;
+        }
+
+        /* Controls Help Footer */
+        .controls-bar {
+            width: 100%;
+            max-width: 668px;
+            margin-top: 10px;
+            font-size: 8px;
+            color: #728c72;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        /* Hidden internal Pygbag elements (kept in DOM for JS runner compatibility) */
+        #transfer, #infobox, #pyconsole, #crt, #dlg, #status, #progress {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0.01;
+            pointer-events: none;
+            overflow: hidden;
+            top: -9999px;
+        }
+
+        @media (max-width: 600px) {
+            .brand h1 { font-size: 10px; }
+            .tab-btn { font-size: 8px; padding: 6px 10px; }
+            .console-frame { padding: 8px; border-radius: 8px; }
+            main.container { padding: 4px; }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Top Header & Dual Platform Tabs -->
+    <header class="top-bar">
+        <div class="brand">
+            <img src="favicon.png" alt="Icon">
+            <h1>ECHOES OF MOSSBELL</h1>
+        </div>
+        <div class="nav-tabs">
+            <button class="tab-btn active" id="tab-play" onclick="switchTab('play')">▶ PLAY ONLINE</button>
+            <button class="tab-btn" id="tab-apk" onclick="switchTab('apk')">📱 DOWNLOAD APK</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- 1. Play Online Section -->
+        <div id="play-panel" class="console-frame">
+            <div class="frame-header">
+                <div><span class="battery-led" id="battery-led"></span>BATTERY</div>
+                <div>DOT MATRIX WITH STEREO SOUND</div>
+                <div>4-SHADE RETRO</div>
+            </div>
+
+            <div class="screen-viewport">
+                <!-- Active Game Canvas -->
+                <canvas class="emscripten" id="canvas" width="1px" height="1px" oncontextmenu="event.preventDefault()" tabindex="1"></canvas>
+                <canvas class="emscripten" id="canvas3d" width="1280px" height="720px" oncontextmenu="event.preventDefault()" tabindex="1" hidden></canvas>
+
+                <!-- Custom Retro Loading Overlay -->
+                <div id="custom-loader">
+                    <div class="loader-title">ECHOES OF MOSSBELL</div>
+                    <div class="stage-badge" id="loader-stage">STAGE 1: DOWNLOADING ENGINE...</div>
+
+                    <div class="progress-box">
+                        <div id="custom-progress-bar"></div>
+                    </div>
+
+                    <div class="progress-meta" id="loader-status">Fetching WebAssembly runtime...</div>
+
+                    <!-- Tap to start button (Audio policy unlocker) -->
+                    <button id="tap-to-start-btn" onclick="startRetroGame()">▶ TOUCH / CLICK TO START</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Download Android APK Section -->
+        <div id="download-panel">
+            <div class="apk-card">
+                <div class="apk-card-header">
+                    <h2>ECHOES OF MOSSBELL (ANDROID APK)</h2>
+                    <span class="apk-badge">GENUINE NATIVE APK • v1.1.0</span>
+                </div>
+
+                <ul class="apk-features">
+                    <li>Native Python 3.11 + Pygame-CE & SDL2 engine.</li>
+                    <li>100% Offline gameplay — play anywhere with zero data connection.</li>
+                    <li>Full Game Boy on-screen touch controller (D-Pad, A/B buttons, Start/Select).</li>
+                    <li>Adaptive fullscreen layout (Portrait & Landscape).</li>
+                    <li>Automatic background auto-save on app pause or incoming calls.</li>
+                    <li>Optimized for ARM64-v8a (Clean, lightweight ~18 MB installation).</li>
+                </ul>
+
+                <a href="https://github.com/rymrimi777-rgb/Echoes-Of-Mossbell/actions" target="_blank" class="download-action-btn">
+                    ⬇ DOWNLOAD OFFICIAL ANDROID APK (v1.1.0)
+                </a>
+
+                <div class="install-guide">
+                    <h3>📱 How to Install on Android / طريقة التثبيت في الهاتف:</h3>
+                    <p>1. Download the <b>.apk</b> file to your phone.</p>
+                    <p>2. Open the downloaded file and choose <b>Install</b> (allow "Install unknown apps" in Settings if prompted).</p>
+                    <p>3. Tap <b>Open</b> and enjoy Echoes of Mossbell offline!</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Guide Footer -->
+        <div class="controls-bar">
+            <b>Controls:</b> Arrows / WASD: Move | SPACE / Enter: Interact & Confirm | X: Back / Run | I: Inventory | P: Pause<br>
+            <i>Mobile: Full Game Boy On-Screen Touch Controls (Multi-Touch supported)</i>
+        </div>
+    </main>
+
+    <!-- Hidden Pygbag compatibility elements (observed by JS) -->
+    <div id="transfer">
+        <div id="status">Downloading...</div>
+        <progress value="0" max="100" id="progress"></progress>
+    </div>
+    <div id="infobox">Loading, please wait ...</div>
+    <div id="pyconsole"><div id="terminal"></div></div>
+    <div id="crt"><div id="system"></div><div id="box"><div id="info"></div><iframe id="iframe"></iframe></div></div>
+    <div id="dlg"></div>
+
+    <script type="application/javascript">
+    function switchTab(tab) {
+        const playPanel = document.getElementById('play-panel');
+        const apkPanel = document.getElementById('download-panel');
+        const tabPlay = document.getElementById('tab-play');
+        const tabApk = document.getElementById('tab-apk');
+
+        if (tab === 'play') {
+            playPanel.style.display = 'flex';
+            apkPanel.classList.remove('active');
+            tabPlay.classList.add('active');
+            tabApk.classList.remove('active');
+        } else {
+            playPanel.style.display = 'none';
+            apkPanel.classList.add('active');
+            tabPlay.classList.remove('active');
+            tabApk.classList.add('active');
+        }
+    }
+
+    // Observer and polling for real loading progress
+    let gameReady = false;
+
+    function checkProgress() {
+        const rawProgress = document.getElementById('progress');
+        const rawStatus = document.getElementById('status');
+        const rawInfobox = document.getElementById('infobox');
+
+        const bar = document.getElementById('custom-progress-bar');
+        const stage = document.getElementById('loader-stage');
+        const statusText = document.getElementById('loader-status');
+        const startBtn = document.getElementById('tap-to-start-btn');
+        const batteryLed = document.getElementById('battery-led');
+
+        if (rawProgress && rawProgress.max > 0) {
+            let percent = Math.min(100, Math.round((rawProgress.value / rawProgress.max) * 100));
+            if (percent > 0) {
+                bar.style.width = percent + '%';
+                statusText.innerText = `Downloading Game Bundle: ${percent}% (2.8 MB)`;
+                stage.innerText = "STAGE 2: DOWNLOADING GAME DATA...";
+            }
+        }
+
+        // Check if Python engine is unpacking or ready
+        const infoMsg = (rawInfobox && rawInfobox.innerText) ? rawInfobox.innerText : '';
+        const statusMsg = (rawStatus && rawStatus.innerText) ? rawStatus.innerText : '';
+
+        if (infoMsg.includes("installing") || infoMsg.includes("Loading")) {
+            stage.innerText = "STAGE 3: UNPACKING RETRO ASSETS...";
+            statusText.innerText = infoMsg;
+            bar.style.width = '90%';
+        }
+
+        if (infoMsg.includes("Ready to start") || infoMsg.includes("click/touch") || gameReady) {
+            gameReady = true;
+            bar.style.width = '100%';
+            stage.innerText = "STAGE 4: ENGINE READY!";
+            statusText.innerText = "Audio & Game Boy engine initialized.";
+            batteryLed.classList.add('ready');
+            startBtn.style.display = 'inline-block';
+        }
+    }
+
+    setInterval(checkProgress, 100);
+
+    function startRetroGame() {
+        const loader = document.getElementById('custom-loader');
+        const canvas = document.getElementById('canvas');
+        const infobox = document.getElementById('infobox');
+
+        // Satisfy Pygbag user media engagement
+        if (window.MM) {
+            window.MM.UME = true;
+        }
+
+        // Simulate touch/click on canvas and infobox
+        if (infobox) infobox.click();
+        if (canvas) canvas.click();
+
+        loader.classList.add('hidden');
+        setTimeout(() => {
+            loader.style.display = 'none';
+        }, 400);
+
+        canvas.focus();
+    }
+
+    async function custom_onload(debug_hidden) {
+        console.log("Echoes of Mossbell: custom_onload triggered.");
+    }
+    function custom_prerun() {}
+    function custom_postrun() {}
+    </script>
+</body>
+</html>
