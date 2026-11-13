@@ -8,4 +8,6 @@ dist/
 .buildozer/
 bin/
 *.zip
+_web_staging/
+temp_pages/
 

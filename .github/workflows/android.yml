@@ -1,32 +1,102 @@
-name: Build Android APK
+name: Build Genuine Android APK
 
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build Android APK
-    runs-on: ubuntu-latest
-
-    container:
-      image: ghcr.io/kivy/buildozer:latest
+    name: Build Android APK (Buildozer + Pygame-CE)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Fix Git Safe Directory
-        run: |
-          git config --global --add safe.directory '*'
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Run Buildozer
+      - name: Set up Java Development Kit (OpenJDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install System Dependencies
         run: |
-          buildozer -v android debug
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            git \
+            ffmpeg \
+            libsdl2-dev \
+            libsdl2-image-dev \
+            libsdl2-mixer-dev \
+            libsdl2-ttf-dev \
+            libportmidi-dev \
+            libswscale-dev \
+            libavformat-dev \
+            libavcodec-dev \
+            zlib1g-dev \
+            libgstreamer1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            libtool \
+            autoconf \
+            automake \
+            ccache \
+            cmake \
+            libffi-dev \
+            libssl-dev \
+            zip \
+            unzip
+
+      - name: Cache Buildozer & Gradle Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.gradle
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
+      - name: Install Python Build Tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade "cython<3.0"
+          python -m pip install --upgrade buildozer
+
+      - name: Build Android APK with Buildozer
+        env:
+          # Automatically answer yes to all SDK/NDK license terms
+          CI: true
+        run: |
+          # Use non-interactive yes pipe to guarantee SDK license agreement
+          yes | buildozer -v android debug
+
+      - name: Locate & Rename Generated APK
+        id: apk_info
+        run: |
+          APK_FILE=$(ls bin/*.apk | head -n 1)
+          echo "Found APK: $APK_FILE"
+          APK_SIZE=$(stat -c%s "$APK_FILE")
+          APK_SIZE_MB=$(echo "scale=2; $APK_SIZE / 1048576" | bc)
+          echo "APK Size: ${APK_SIZE_MB} MB"
+          
+          # Standardized output name for easy download
+          cp "$APK_FILE" bin/EchoesOfMossbell-v1.1.0-arm64.apk
+          echo "apk_path=bin/EchoesOfMossbell-v1.1.0-arm64.apk" >> $GITHUB_OUTPUT
+          echo "apk_size=${APK_SIZE_MB} MB" >> $GITHUB_OUTPUT
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: EchoesOfMossbell-Android-APK
           path: bin/*.apk
+          retention-days: 90
