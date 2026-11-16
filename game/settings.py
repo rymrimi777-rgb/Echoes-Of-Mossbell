@@ -10,6 +10,8 @@ if getattr(sys, "frozen", False):
     meipass = getattr(sys, "_MEIPASS", exe_dir)
     if os.path.exists(os.path.join(meipass, "assets")):
         BASE_DIR = meipass
+    elif os.path.exists(os.path.join(exe_dir, "_internal", "assets")):
+        BASE_DIR = os.path.join(exe_dir, "_internal")
     elif os.path.exists(os.path.join(exe_dir, "assets")):
         BASE_DIR = exe_dir
     else:
