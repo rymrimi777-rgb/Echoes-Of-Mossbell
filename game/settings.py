@@ -40,6 +40,16 @@ if not os.path.isdir(BUTTON_DIR):
     _alt_btn = os.path.join(BASE_DIR, "GameBoy_Touch_Controls_Split", "assets", "buttons")
     if os.path.isdir(_alt_btn):
         BUTTON_DIR = _alt_btn
+
+# ---------- Environment & Future Expansion Paths ----------------------------
+ENV_DIR       = os.path.join(ASSET_DIR, "environment")
+TREES_DIR     = os.path.join(ENV_DIR, "trees")
+BUILDINGS_DIR = os.path.join(ENV_DIR, "buildings")
+MONSTERS_DIR  = os.path.join(ASSET_DIR, "monsters")
+BOSSES_DIR    = os.path.join(ASSET_DIR, "bosses")
+HUD_DIR       = os.path.join(UI_DIR, "hud")
+MENU_DIR      = os.path.join(UI_DIR, "menu")
+JOURNAL_DIR   = os.path.join(UI_DIR, "journal")
 OCEAN_DIR   = os.path.join(BASE_DIR, "Ocean_Nostalgia_Pygame_Ready")
 if not os.path.isdir(OCEAN_DIR):
     _alt = os.path.join(ASSET_DIR, "Ocean_Nostalgia_Pygame_Ready")

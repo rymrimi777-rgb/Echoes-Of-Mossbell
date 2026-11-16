@@ -595,11 +595,18 @@ class Game:
         elif self.state in (STATE_PLAY, STATE_PAUSE, STATE_DIALOGUE, STATE_TRANSITION):
             # Draw world layers
             self.current_map.draw_ground(self.native, self.camera)
+            if hasattr(self.current_map, "draw_ground_structures"):
+                self.current_map.draw_ground_structures(self.native, self.camera)
             self.current_map.draw_props(self.native, self.camera)
             self.current_map.draw_items(self.native, self.camera, self.flags)
 
-            # Draw NPCs and Player sorted by Y coordinate for depth
+            # Draw NPCs, Player, and Y-sorted Structures (trees, buildings, towers)
             render_items = []
+            if hasattr(self.current_map, "structures"):
+                for st in self.current_map.structures:
+                    if not getattr(st, "is_ground", False):
+                        render_items.append((st.base_y, "structure", st, None))
+
             for npc in self.current_map.npcs:
                 anim = self.npc_animators.get(npc.npc_id)
                 if anim:
@@ -608,7 +615,11 @@ class Game:
             render_items.sort(key=lambda it: it[0])
 
             for y_pos, kind, entity, anim in render_items:
-                if kind == "npc":
+                if kind == "structure":
+                    surf = entity.get_surface()
+                    sx, sy = self.camera.apply(entity.px, entity.py)
+                    self.native.blit(surf, (sx, sy))
+                elif kind == "npc":
                     frame = anim.get_frame()
                     fw, fh = frame.get_size()
                     draw_x = entity.x - (fw - 16) // 2
