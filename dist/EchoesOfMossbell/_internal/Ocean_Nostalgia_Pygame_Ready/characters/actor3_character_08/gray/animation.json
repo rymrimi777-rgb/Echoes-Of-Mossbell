@@ -1,0 +1,35 @@
+{
+  "character_id": "actor3_character_08",
+  "source_pack": "Actor3",
+  "source_engine_layout": "RPG Maker MV",
+  "variant": "gray",
+  "frame_size": {
+    "width": 72,
+    "height": 96
+  },
+  "sheet_size": {
+    "width": 216,
+    "height": 384
+  },
+  "frames_per_direction": 3,
+  "directions_order": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "row_mapping": {
+    "0": "down",
+    "1": "left",
+    "2": "right",
+    "3": "up"
+  },
+  "animation_recommendation": {
+    "fps": 8,
+    "loop": true,
+    "idle_frame_index": 1
+  },
+  "alpha_channel": true,
+  "scaling": "Nearest-neighbor only; do not smooth or blur pixel art.",
+  "pygame_note": "Load the direction strip and crop one frame at a time, or use frames/<direction>/frame_00.png through frame_02.png."
+}

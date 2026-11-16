@@ -1,0 +1,168 @@
+{
+"layout": "4x4 corner-Wang, tile index = NW*1 + NE*2 + SW*4 + SE*8 (bit set = second terrain)",
+"tile_w": 16,
+"tile_h": 16,
+"tiles": {
+"0": {
+"col": 0,
+"row": 0,
+"corners": {
+"NW": 0,
+"NE": 0,
+"SW": 0,
+"SE": 0
+}
+},
+"1": {
+"col": 1,
+"row": 0,
+"corners": {
+"NW": 1,
+"NE": 0,
+"SW": 0,
+"SE": 0
+}
+},
+"2": {
+"col": 2,
+"row": 0,
+"corners": {
+"NW": 0,
+"NE": 1,
+"SW": 0,
+"SE": 0
+}
+},
+"3": {
+"col": 3,
+"row": 0,
+"corners": {
+"NW": 1,
+"NE": 1,
+"SW": 0,
+"SE": 0
+}
+},
+"4": {
+"col": 0,
+"row": 1,
+"corners": {
+"NW": 0,
+"NE": 0,
+"SW": 1,
+"SE": 0
+}
+},
+"5": {
+"col": 1,
+"row": 1,
+"corners": {
+"NW": 1,
+"NE": 0,
+"SW": 1,
+"SE": 0
+}
+},
+"6": {
+"col": 2,
+"row": 1,
+"corners": {
+"NW": 0,
+"NE": 1,
+"SW": 1,
+"SE": 0
+}
+},
+"7": {
+"col": 3,
+"row": 1,
+"corners": {
+"NW": 1,
+"NE": 1,
+"SW": 1,
+"SE": 0
+}
+},
+"8": {
+"col": 0,
+"row": 2,
+"corners": {
+"NW": 0,
+"NE": 0,
+"SW": 0,
+"SE": 1
+}
+},
+"9": {
+"col": 1,
+"row": 2,
+"corners": {
+"NW": 1,
+"NE": 0,
+"SW": 0,
+"SE": 1
+}
+},
+"10": {
+"col": 2,
+"row": 2,
+"corners": {
+"NW": 0,
+"NE": 1,
+"SW": 0,
+"SE": 1
+}
+},
+"11": {
+"col": 3,
+"row": 2,
+"corners": {
+"NW": 1,
+"NE": 1,
+"SW": 0,
+"SE": 1
+}
+},
+"12": {
+"col": 0,
+"row": 3,
+"corners": {
+"NW": 0,
+"NE": 0,
+"SW": 1,
+"SE": 1
+}
+},
+"13": {
+"col": 1,
+"row": 3,
+"corners": {
+"NW": 1,
+"NE": 0,
+"SW": 1,
+"SE": 1
+}
+},
+"14": {
+"col": 2,
+"row": 3,
+"corners": {
+"NW": 0,
+"NE": 1,
+"SW": 1,
+"SE": 1
+}
+},
+"15": {
+"col": 3,
+"row": 3,
+"corners": {
+"NW": 1,
+"NE": 1,
+"SW": 1,
+"SE": 1
+}
+}
+},
+"image": "autotile_path.png"
+}
