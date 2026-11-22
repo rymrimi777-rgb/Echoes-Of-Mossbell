@@ -2,12 +2,18 @@
 Save / Load system – JSON-based, stored in saves/ folder.
 """
 import os, json, time, pygame
-from game.settings import SAVE_DIR
+from game.settings import SAVE_DIR, IS_ANDROID
 
 
 class SaveSystem:
     def __init__(self):
         save_folder = SAVE_DIR
+        if IS_ANDROID:
+            android_private = os.environ.get("ANDROID_PRIVATE", "")
+            if not android_private and "ANDROID_ARGUMENT" in os.environ:
+                android_private = os.environ["ANDROID_ARGUMENT"]
+            if android_private:
+                save_folder = os.path.join(android_private, "saves")
         try:
             if hasattr(pygame, "system") and hasattr(pygame.system, "get_pref_path"):
                 pref = pygame.system.get_pref_path("MossbellGames", "EchoesOfMossbell")

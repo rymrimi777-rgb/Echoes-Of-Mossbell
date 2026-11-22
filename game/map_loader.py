@@ -101,7 +101,7 @@ def get_big_prop(name):
     }
     if name in files and os.path.isfile(files[name]):
         _big_cache[name] = load_image(files[name])
-    else:
+    else: 
         s = pygame.Surface((32, 32))
         s.fill((48, 98, 48))
         _big_cache[name] = s

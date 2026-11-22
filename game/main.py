@@ -55,7 +55,8 @@ class Game:
         self.clock = pygame.time.Clock()
 
         # Touch Controls (Auto on mobile / Resizable on desktop)
-        self.touch_ctrl = TouchController(WINDOW_W, WINDOW_H)
+        scr_w, scr_h = self.screen.get_size()
+        self.touch_ctrl = TouchController(scr_w, scr_h)
         if IS_ANDROID:
             self.touch_ctrl.mode = "always"
             self.touch_ctrl.visible = True

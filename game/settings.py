@@ -114,3 +114,10 @@ KEYS_PAUSE     = (pygame.K_ESCAPE, pygame.K_p, pygame.K_TAB)
 
 # Android / Mobile platform flag
 IS_ANDROID     = hasattr(pygame, "android") or ("ANDROID_ROOT" in os.environ) or ("ANDROID_ARGUMENT" in os.environ)
+
+# Android Back button support (SDL2 K_AC_BACK)
+if hasattr(pygame, "K_AC_BACK"):
+    if pygame.K_AC_BACK not in KEYS_CANCEL:
+        KEYS_CANCEL = KEYS_CANCEL + (pygame.K_AC_BACK,)
+    if pygame.K_AC_BACK not in KEYS_PAUSE:
+        KEYS_PAUSE = KEYS_PAUSE + (pygame.K_AC_BACK,)
