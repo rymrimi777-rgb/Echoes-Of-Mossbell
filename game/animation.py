@@ -8,7 +8,12 @@ from game.ocean_animator import OceanCharacterAnimator
 
 def load_image(path, colorkey=None):
     """Load a PNG and convert for fast blitting."""
-    img = pygame.image.load(path).convert_alpha()
+    img = pygame.image.load(path)
+    if pygame.display.get_surface() is not None:
+        try:
+            img = img.convert_alpha()
+        except Exception:
+            pass
     if colorkey is not None:
         img.set_colorkey(colorkey)
     return img

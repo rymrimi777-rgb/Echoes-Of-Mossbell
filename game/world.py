@@ -1,10 +1,13 @@
 """
 World definition – 8 connected maps with interiors, dungeons, animated water & flowers,
-integrated 48x48 Game Boy environmental structures (buildings, cottages, towers, fountains, bridges, and diverse trees),
-NPCs with animated portraits, interactive furniture, and secrets.
+integrated 48x48 Game Boy environmental structures (buildings, cottages, towers, fountains),
+Free_1.1 decorations (bridges, cave entrances/stairs, lampposts, benches, pickets, tall grass, reeds),
+NPCs with animated portraits, interactive furniture, secrets, and SGQ Action-RPG enemies.
 """
 from game.map_loader import (GameMap, NPCDef, WarpDef, ItemPickup,
                              InteractiveObject, StructureDef)
+from game.monsters import Monster
+from game.placement_validator import PlacementValidator
 
 
 def _fill(w, h, val):
@@ -16,11 +19,10 @@ def _fill(w, h, val):
 # -----------------------------------------------------------------------------
 def build_village():
     W, H = 22, 18
-    # Ground pattern
     ground = _fill(W, H, "g0")
     solids = _fill(W, H, 0)
 
-    # Perimeter solid boundaries (leaving East road open)
+    # Perimeter boundaries
     for tx in range(W):
         solids[0][tx] = 1
         solids[H - 1][tx] = 1
@@ -28,11 +30,11 @@ def build_village():
         solids[ty][0] = 1
         solids[ty][W - 1] = 1
 
-    # Main stone crossroads
+    # Main crossroads: East-West road (y=9, 10) and North-South road (x=10, 11)
     for tx in range(2, W):
         ground[9][tx] = "p1"
         ground[10][tx] = "p1"
-    for ty in range(4, 16):
+    for ty in range(1, H - 1):
         ground[ty][10] = "p1"
         ground[ty][11] = "p1"
 
@@ -55,11 +57,17 @@ def build_village():
     for fx, fy in flower_coords:
         ground[fy][fx] = "fl"
 
-    # Village Pond with Animated Water (south-east: x=14..17, y=12..15)
+    # Village Pond with Animated Water (south-east: x=15..17, y=12..15)
     for py in range(12, 16):
-        for px in range(14, 18):
+        for px in range(15, 18):
             ground[py][px] = "wt"
-            solids[py][px] = 1  # water is solid to walk on
+            solids[py][px] = 1
+
+    # Water inlet crossing: stream at x=15..16, y=13
+    # Validated horizontal bridge spanning x=15..16 at y=13
+    # West bank at x=14 is walkable ground p1, East bank at x=17 is walkable ground p1
+    ground[13][14] = "p1"
+    ground[13][17] = "p1"
 
     # Doors are open for entering!
     solids[4][4] = 0   # Player house doorstep
@@ -69,16 +77,22 @@ def build_village():
     solids[9][W - 1] = 0
     solids[10][W - 1] = 0
 
-    # 48x48 Environmental Structures (Buildings, Landmarks, and Diverse Trees)
+    # North and South roads: clear of invisible blocks, bordered by visible landmarks
+    solids[1][10] = 0
+    solids[1][11] = 0
+    solids[H - 2][10] = 0
+    solids[H - 2][11] = 0
+
+    # Environmental Structures and Decorations
     structures = [
-        # 1. Player's Stone Cottage (x=48..96, y=16..64) - doorway open at x=64..72
+        # 1. Player's Stone Cottage (x=48..96, y=16..64)
         StructureDef("bldg_11", 48, 16, col_boxes=[(4, 20, 14, 24), (30, 20, 14, 24)]),
 
-        # 2. Elder Orin's Residence & Archives (x=240..288, y=16..64) - doorway open at x=256..264
+        # 2. Elder Orin's Residence & Archives (x=240..288, y=16..64)
         StructureDef("bldg_06", 240, 16, col_boxes=[(4, 20, 14, 24), (30, 20, 14, 24)]),
 
-        # 3. Mossbell Central Fountain (plaza north of crossroads)
-        StructureDef("bldg_04", 144, 48, col_boxes=[(8, 18, 32, 22)]),
+        # 3. Mossbell Central Fountain (placed in western plaza square, keeping north road open!)
+        StructureDef("bldg_04", 48, 112, col_boxes=[(8, 18, 32, 22)]),
 
         # 4. Village Stone Well (near east crossroads)
         StructureDef("bldg_09", 288, 80, col_boxes=[(8, 16, 32, 22)]),
@@ -99,10 +113,10 @@ def build_village():
         StructureDef("bldg_14", 224, 128, col_boxes=[(6, 22, 36, 22)]),
 
         # 10. Village Watermill (built by the pond edge)
-        StructureDef("bldg_12", 216, 192, col_boxes=[(4, 18, 40, 26)]),
+        StructureDef("bldg_12", 224, 192, col_boxes=[(4, 18, 40, 26)]),
 
-        # 11. Wooden Footbridge crossing the pond inlet (walkable ground structure)
-        StructureDef("bldg_13", 264, 208, col_boxes=False, is_ground=True),
+        # 11. Validated Horizontal Bridge crossing the pond inlet (x=15..16, y=13)
+        StructureDef("bridge_h", 15 * 16, 13 * 16, col_boxes=False, is_ground=True),
 
         # 12. Northeast Watchtower Bastion overlooking the forest road
         StructureDef("bldg_03", 288, 16, col_boxes=[(12, 24, 24, 22)]),
@@ -110,25 +124,41 @@ def build_village():
         # 13. Weathered Stone Wall segment (village eastern perimeter)
         StructureDef("bldg_05", 288, 128, col_boxes=[(6, 18, 36, 18)]),
 
+        # 14. Free_1.1 Village Decorations:
+        # Benches near central square and garden
+        StructureDef("bench_h", 100, 128, col_boxes=[(2, 4, 28, 12)]),
+        StructureDef("bench_h", 144, 176, col_boxes=[(2, 4, 28, 12)]),
+        # Street lampposts along the crossroads
+        StructureDef("lampost", 144, 48, col_boxes=[(4, 36, 8, 12)]),
+        StructureDef("lampost", 144, 128, col_boxes=[(4, 36, 8, 12)]),
+        StructureDef("lampost", 208, 128, col_boxes=[(4, 36, 8, 12)]),
+        # Picket fences framing homes
+        StructureDef("fence_picket", 16, 16, col_boxes=[(2, 24, 20, 24)]),
+        StructureDef("fence_picket", 112, 16, col_boxes=[(2, 24, 20, 24)]),
+        # Reeds along the pond edge
+        StructureDef("reeds", 14 * 16, 12 * 16, is_ground=True),
+        StructureDef("reeds", 18 * 16, 14 * 16, is_ground=True),
+
         # Trees within the village:
-        # Grand Village Canopy Oak (southern park)
-        StructureDef("tree_10", 144, 208),
-        # Weeping Willow beside the millpond
-        StructureDef("tree_06", 288, 168),
-        # Small Blossom Trees in cottage yards
-        StructureDef("tree_11", 104, 24),
+        StructureDef("tree_10", 144, 208),  # Grand canopy oak
+        StructureDef("tree_06", 288, 168),  # Willow by the millpond
+        StructureDef("tree_11", 104, 24),   # Blossom trees
         StructureDef("tree_11", 88, 208),
-        # Round Oaks along northern border
-        StructureDef("tree_02", 0, 0),
+        StructureDef("tree_02", 0, 0),      # Round oaks along border
         StructureDef("tree_02", 104, 0),
-        # Twin Trees at western boundary
-        StructureDef("tree_08", 0, 160),
-        # Dense Bushes
-        StructureDef("tree_09", 40, 160),
+        StructureDef("tree_08", 0, 160),    # Twin trees
+        StructureDef("tree_09", 40, 160),   # Dense bushes
         StructureDef("tree_09", 192, 80),
     ]
 
-    # Props: bushes, rocks, stump
+    # Validate the bridge placement
+    v_ok, _ = PlacementValidator.validate_bridge(W, H, ground, solids, 15, 13, "horizontal")
+    if not v_ok:
+        # Fallback safeguard
+        solids[13][15] = 0
+        solids[13][16] = 0
+
+    # Props: bushes, rocks, fences
     props = [
         ("fn", 2, 13), ("fn", 2, 14), ("fn", 6, 13), ("fn", 6, 14),
         ("bu", 7, 3), ("bu", 13, 3), ("bu", 7, 12), ("bu", 13, 12),
@@ -149,7 +179,7 @@ def build_village():
             "'Beware of Whispering Woods after dusk.'",
             "'Report any strange sightings to Elder Orin.'"
         ]),
-        InteractiveObject(10 * 16 - 8, 4 * 16, 16, 16, [
+        InteractiveObject(3 * 16, 7 * 16, 16, 16, [
             "Mossbell Village Fountain:",
             "Pure mountain spring water ripples gently in the stone basin."
         ]),
@@ -160,6 +190,10 @@ def build_village():
         InteractiveObject(6 * 16 - 8, 7 * 16, 16, 16, [
             "Market Stall:",
             "Fresh forest apples, hearth loaves, and travelers' supplies."
+        ]),
+        InteractiveObject(10 * 16, 1 * 16, 2 * 16, 16, [
+            "Northern Mountain Gate:",
+            "'Dragon's Ridge Pass - Closed by decree of Elder Orin.'"
         ]),
     ]
 
@@ -192,10 +226,7 @@ def build_village():
                ]),
     ]
 
-    # Warps:
-    # 1. Door into Player House
-    # 2. Door into Elder House
-    # 3. East path into Forest
+    # Warps
     warps = [
         WarpDef(4 * 16, 3 * 16 + 8, 16, 12, "player_house", 5 * 16, 8 * 16),
         WarpDef(16 * 16, 3 * 16 + 8, 16, 12, "elder_house", 5 * 16, 8 * 16),
@@ -214,32 +245,27 @@ def build_village():
 # -----------------------------------------------------------------------------
 def build_player_house():
     W, H = 12, 10
-    ground = _fill(W, H, "in_3_0")  # wooden floor
+    ground = _fill(W, H, "in_3_0")
     solids = _fill(W, H, 0)
 
-    # Perimeter walls
     for tx in range(W):
         solids[0][tx] = 1
-        solids[1][tx] = 1  # top wall 2 tiles high
+        solids[1][tx] = 1
         solids[H - 1][tx] = 1
     for ty in range(H):
         solids[ty][0] = 1
         solids[ty][W - 1] = 1
 
-    # Leave south doorway open
     solids[H - 1][5] = 0
 
-    # Back wall tiles
     for tx in range(1, W - 1):
         ground[0][tx] = "in_0_0"
         ground[1][tx] = "in_1_0"
 
-    # Carpet / Rug in center
     for rx in range(4, 8):
         for ry in range(4, 7):
             ground[ry][rx] = "p1"
 
-    # Props in house:
     props = [
         ("in_2_1", 2, 2), ("in_2_2", 3, 2),
         ("in_0_4", 8, 2), ("in_1_4", 8, 3),
@@ -358,35 +384,37 @@ def build_forest():
                 elif (tx + ty * 4) % 9 == 0:
                     ground[ty][tx] = "g4"
 
-    # Animated Flower patches in forest clearings
+    # Clearings
     for fx, fy in [(4, 5), (5, 5), (14, 5), (15, 5), (5, 13), (14, 13)]:
         ground[fy][fx] = "fl"
 
-    # Forest stream with animated water (vertical brook on east side)
-    for sy in range(2, 7):
+    # Forest stream with animated water (vertical brook on east side at x=15..16)
+    for sy in range(2, 16):
+        ground[sy][15] = "wt"
         ground[sy][16] = "wt"
-        solids[sy][16] = 1
-    for sy in range(12, 16):
-        ground[sy][16] = "wt"
+        solids[sy][15] = 1
         solids[sy][16] = 1
 
-    # Footbridge crossing stream at the path (x=16, y=8..10)
-    ground[8][16] = "p1"
-    ground[9][16] = "p1"
-    ground[10][16] = "p1"
-    solids[8][16] = 0
-    solids[9][16] = 0
-    solids[10][16] = 0
+    # Horizontal bridge crossing the brook at y=9
+    # Under-bridge water at x=15, 16, y=9
+    # West landing at x=14 (p1), East landing at x=17 (p1)
+    ground[9][14] = "p1"
+    ground[9][17] = "p1"
 
     # Exits:
     solids[9][0] = 0         # West -> Village
     solids[9][W - 1] = 0     # East -> Deep Forest
     solids[H - 1][10] = 0    # South -> Ruins
 
-    # Diverse Forest Trees and Environmental Structures
+    # Validated bridge
+    v_ok, _ = PlacementValidator.validate_bridge(W, H, ground, solids, 15, 9, "horizontal")
+    if not v_ok:
+        solids[9][15] = 0
+        solids[9][16] = 0
+
     structures = [
-        # Wooden Footbridge crossing the forest stream at the trail
-        StructureDef("bldg_13", 15 * 16 - 8, 8 * 16 - 4, col_boxes=False, is_ground=True),
+        # Validated horizontal bridge across the brook
+        StructureDef("bridge_h", 15 * 16, 9 * 16, col_boxes=False, is_ground=True),
 
         # Woodsman's Firewood Cart by his camp
         StructureDef("bldg_10", 7 * 16, 6 * 16, col_boxes=[(12, 18, 24, 20)]),
@@ -394,8 +422,17 @@ def build_forest():
         # Ancient Overgrown Ruined Wall segment near south exit
         StructureDef("bldg_05", 13 * 16, 13 * 16, col_boxes=[(6, 18, 36, 18)]),
 
-        # Diverse Forest Trees (natural distribution without repetitive patterns)
-        StructureDef("tree_10", 64, 16),      # Grand forest canopy oak
+        # Free_1.1 Decorations: tall pine, tall grass, reeds
+        StructureDef("pine_tall", 18 * 16, 2 * 16),
+        StructureDef("pine_tall", 18 * 16, 14 * 16),
+        StructureDef("reeds", 14 * 16, 3 * 16, is_ground=True),
+        StructureDef("reeds", 14 * 16, 13 * 16, is_ground=True),
+        StructureDef("reeds", 17 * 16, 4 * 16, is_ground=True),
+        StructureDef("tall_grass", 3 * 16, 12 * 16, is_ground=True),
+        StructureDef("tall_grass", 12 * 16, 4 * 16, is_ground=True),
+
+        # Diverse Forest Trees
+        StructureDef("tree_10", 64, 16),      # Grand canopy oak
         StructureDef("tree_02", 16, 16),      # Lush round oaks
         StructureDef("tree_02", 112, 16),
         StructureDef("tree_06", 240, 16),     # Willows along the brook
@@ -409,7 +446,7 @@ def build_forest():
         StructureDef("tree_12", 16, 192),     # Pines on outer borders
         StructureDef("tree_12", 256, 16),
         StructureDef("tree_12", 256, 192),
-        StructureDef("tree_09", 16, 144),     # Dense bushes & vegetation
+        StructureDef("tree_09", 16, 144),     # Dense bushes
         StructureDef("tree_09", 96, 192),
     ]
 
@@ -440,6 +477,15 @@ def build_forest():
         ItemPickup("herb", 6 * 16, 14 * 16, "herb_3"),
     ]
 
+    # SGQ Enemies in Forest: Slimes, Rats, and Goblin
+    enemies = [
+        Monster("slime", 5 * 16, 12 * 16, patrol_radius=32),
+        Monster("slime", 13 * 16, 6 * 16, patrol_radius=24),
+        Monster("slime", 12 * 16, 14 * 16, patrol_radius=32),
+        Monster("rat", 7 * 16, 4 * 16, patrol_radius=40),
+        Monster("goblin", 17 * 16, 12 * 16, patrol_radius=30),
+    ]
+
     warps = [
         WarpDef(0, 9 * 16, 16, 16, "village", 20 * 16, 9 * 16),
         WarpDef((W - 1) * 16, 9 * 16, 16, 16, "deep_forest", 16, 9 * 16),
@@ -448,7 +494,7 @@ def build_forest():
 
     return GameMap("forest", W, H, ground, solids, props, [],
                    npcs, warps, items, interactives, music="cag04 - Game Theme-B.mp3",
-                   structures=structures)
+                   structures=structures, enemies=enemies)
 
 
 # -----------------------------------------------------------------------------
@@ -468,15 +514,24 @@ def build_deep_forest():
 
     # Exits:
     solids[9][0] = 0         # West -> Forest
-    solids[H - 1][16] = 0    # Secret south passage -> Grotto
+    solids[14][16] = 0       # South-east passage inside cave entrance
+    solids[15][16] = 0
 
-    # Dark woods gnarled structures & dead trees
     structures = [
-        # Ancient Mystical Mushroom Tower towering over the shadow clearing
+        # Ancient Mystical Mushroom Tower
         StructureDef("bldg_08", 14 * 16, 1 * 16, col_boxes=[(14, 28, 20, 18)]),
 
-        # Sunken Overgrown Ruin Wall in the forest labyrinth
+        # Sunken Overgrown Ruin Wall in the labyrinth
         StructureDef("bldg_05", 6 * 16, 8 * 16, col_boxes=[(6, 18, 36, 18)]),
+
+        # Cave Entrance leading down into the Shadow Grotto (Free_1.1)
+        StructureDef("cave_entrance", 15 * 16, 14 * 16),
+
+        # Cave boulders and dark foliage
+        StructureDef("cave_boulder", 4 * 16, 12 * 16),
+        StructureDef("cave_boulder", 12 * 16, 11 * 16),
+        StructureDef("tall_grass", 7 * 16, 4 * 16, is_ground=True),
+        StructureDef("tall_grass", 11 * 16, 14 * 16, is_ground=True),
 
         # Dead, Hanging, and Ancient Twisted Trees
         StructureDef("tree_01", 0, 0),
@@ -507,19 +562,28 @@ def build_deep_forest():
     ]
 
     interactives = [
-        InteractiveObject(16 * 16, 16 * 16, 16, 16, [
-            "A dark fissure between twisted dead roots leads into an abyssal cavern..."
+        InteractiveObject(16 * 16, 14 * 16, 16, 16, [
+            "A dark cavern mouth leads down into the subterranean Shadow Grotto..."
         ]),
+    ]
+
+    # SGQ Enemies in Deep Forest: Spiders, Bats, and Gelatinous Cube Slime
+    enemies = [
+        Monster("spider", 5 * 16, 7 * 16, patrol_radius=36),
+        Monster("spider", 12 * 16, 8 * 16, patrol_radius=30),
+        Monster("bat", 9 * 16, 12 * 16, patrol_radius=45),
+        Monster("bat", 4 * 16, 14 * 16, patrol_radius=45),
+        Monster("cube_slime", 16 * 16, 6 * 16, patrol_radius=28),
     ]
 
     warps = [
         WarpDef(0, 9 * 16, 16, 16, "forest", 18 * 16, 9 * 16),
-        WarpDef(16 * 16, (H - 1) * 16, 16, 16, "grotto", 10 * 16, 16),
+        WarpDef(16 * 16, 15 * 16, 16, 16, "grotto", 10 * 16, 2 * 16),
     ]
 
     return GameMap("deep_forest", W, H, ground, solids, props, [],
                    [], warps, items, interactives, music="cag07 - Game Theme-A+B.mp3",
-                   structures=structures)
+                   structures=structures, enemies=enemies)
 
 
 # -----------------------------------------------------------------------------
@@ -550,7 +614,7 @@ def build_ruins():
     solids[13][9] = 0
     solids[13][10] = 0
 
-    # Crypt entrance doorway at back of ruins (x=9..10, y=5)
+    # Crypt stairway at back of ruins (x=9..10, y=5)
     solids[5][9] = 0
     solids[5][10] = 0
 
@@ -561,6 +625,15 @@ def build_ruins():
         # Ruined fortress rampart walls
         StructureDef("bldg_05", 2 * 16, 6 * 16, col_boxes=[(6, 18, 36, 18)]),
         StructureDef("bldg_05", 14 * 16, 6 * 16, col_boxes=[(6, 18, 36, 18)]),
+
+        # Cave stairs descending into dungeon (Free_1.1)
+        StructureDef("cave_stairs_down", 9 * 16, 5 * 16, is_ground=True),
+
+        # Tall grass and boulders in courtyard
+        StructureDef("tall_grass", 7 * 16, 8 * 16, is_ground=True),
+        StructureDef("tall_grass", 12 * 16, 8 * 16, is_ground=True),
+        StructureDef("cave_boulder", 5 * 16, 11 * 16),
+        StructureDef("cave_boulder", 14 * 16, 11 * 16),
 
         # Dead and alpine trees around the fortress
         StructureDef("tree_07", 0, 0),
@@ -578,7 +651,6 @@ def build_ruins():
         ("rk", 4, 3), ("rk", 15, 3),
     ]
 
-    # Ghost NPC inside the ruins
     npcs = [
         NPCDef("ghost", "Phantom Knight", "king.png", 9 * 16, 9 * 16,
                "down", portrait="king", ocean_char_id="actor3_character_01",
@@ -589,7 +661,6 @@ def build_ruins():
                ]),
     ]
 
-    # Mother's lost ring and map piece in the ruins
     items = [
         ItemPickup("ring", 11 * 16, 9 * 16, "timmy_ring"),
         ItemPickup("map_piece", 8 * 16, 9 * 16, "dungeon_map"),
@@ -601,14 +672,21 @@ def build_ruins():
         ]),
     ]
 
+    # SGQ Enemies in Ruins: Skeletons and Phantoms
+    enemies = [
+        Monster("skeleton", 7 * 16, 11 * 16, patrol_radius=25),
+        Monster("skeleton", 12 * 16, 11 * 16, patrol_radius=25),
+        Monster("ghost", 4 * 16, 9 * 16, patrol_radius=35),
+    ]
+
     warps = [
         WarpDef(10 * 16, 0, 16, 16, "forest", 10 * 16, (H - 2) * 16),
-        WarpDef(9 * 16, 5 * 16, 2 * 16, 16, "dungeon", 8 * 16, 12 * 16),
+        WarpDef(9 * 16, 5 * 16, 2 * 16, 16, "dungeon", 8 * 16, 11 * 16),
     ]
 
     return GameMap("ruins", W, H, ground, solids, props, [],
                    npcs, warps, items, interactives, music="stg02 - Game Start.mp3",
-                   structures=structures)
+                   structures=structures, enemies=enemies)
 
 
 # -----------------------------------------------------------------------------
@@ -616,10 +694,9 @@ def build_ruins():
 # -----------------------------------------------------------------------------
 def build_dungeon():
     W, H = 16, 14
-    ground = _fill(W, H, "dg_5_2")  # dungeon flagstone floor
+    ground = _fill(W, H, "dg_5_2")
     solids = _fill(W, H, 0)
 
-    # Outer dungeon walls
     for tx in range(W):
         solids[0][tx] = 1
         solids[1][tx] = 1
@@ -628,7 +705,6 @@ def build_dungeon():
         solids[ty][0] = 1
         solids[ty][W - 1] = 1
 
-    # North back wall
     for tx in range(1, W - 1):
         ground[0][tx] = "dg_0_2"
         ground[1][tx] = "dg_1_2"
@@ -637,6 +713,24 @@ def build_dungeon():
     for ty in range(3, 8):
         solids[ty][5] = 1
         solids[ty][10] = 1
+
+    # Stairs up to ruins at south (x=8, y=12)
+    solids[12][8] = 0
+
+    # Secret east passage to Grotto at (x=W-2, y=5)
+    solids[5][W - 1] = 0
+
+    structures = [
+        # Cave stairs leading up back to the ruins
+        StructureDef("cave_stairs_up", 8 * 16, 12 * 16, is_ground=True),
+
+        # Cave exit fissure on east wall opening to Shadow Grotto
+        StructureDef("cave_exit", 13 * 16, 5 * 16),
+
+        # Boulders inside cells
+        StructureDef("cave_boulder", 2 * 16, 7 * 16),
+        StructureDef("cave_boulder", 13 * 16, 7 * 16),
+    ]
 
     props = [
         ("bo", 3, 5), ("bo", 12, 5), ("bo", 8, 8),
@@ -657,14 +751,27 @@ def build_dungeon():
             "An ancient stone altar glowing faintly.",
             "Inscribed: 'The Shadow King awaits in the deep grotto.'"
         ]),
+        InteractiveObject(13 * 16, 5 * 16, 2 * 16, 16, [
+            "A cracked stone fissure opens into a subterranean cave channel..."
+        ]),
+    ]
+
+    # SGQ Enemies in Dungeon: Flying skulls, Giant rats, and Great Slime mini-boss
+    enemies = [
+        Monster("flying_skull", 5 * 16, 6 * 16, patrol_radius=30),
+        Monster("flying_skull", 10 * 16, 6 * 16, patrol_radius=30),
+        Monster("rat", 8 * 16, 9 * 16, patrol_radius=25),
+        Monster("medium_slime", 7 * 16, 5 * 16, patrol_radius=20),
     ]
 
     warps = [
-        WarpDef(8 * 16, (H - 1) * 16, 16, 16, "ruins", 9 * 16, 6 * 16),
+        WarpDef(8 * 16, 12 * 16, 16, 16, "ruins", 9 * 16, 6 * 16),
+        WarpDef((W - 1) * 16, 5 * 16, 16, 16, "grotto", 2 * 16, 9 * 16),
     ]
 
     return GameMap("dungeon", W, H, ground, solids, props, [],
-                   [], warps, items, interactives, music="bpag03 - Game Over.mp3")
+                   [], warps, items, interactives, music="bpag03 - Game Over.mp3",
+                   structures=structures, enemies=enemies)
 
 
 # -----------------------------------------------------------------------------
@@ -682,37 +789,62 @@ def build_grotto():
         solids[ty][0] = 1
         solids[ty][W - 1] = 1
 
-    solids[0][10] = 0  # North exit back to Deep Forest
+    # North exit to Deep Forest (x=10, y=0..1)
+    solids[0][10] = 0
+    solids[1][10] = 0
 
-    # Mysterious columns
-    pillars = [(5, 5), (14, 5), (5, 12), (14, 12), (8, 8), (11, 8)]
+    # West passage back to Dungeon (x=0, y=9)
+    solids[9][0] = 0
+
+    # Underground cavern lake on west side (x=3..5, y=11..14)
+    for ly in range(11, 15):
+        for lx in range(3, 6):
+            ground[ly][lx] = "wt"
+            solids[ly][lx] = 1
+
+    # Stepping stones across the cavern pool
+    ground[13][4] = "wt"
+
+    # Stone pillars
+    pillars = [(5, 5), (14, 5), (14, 12), (8, 8), (11, 8)]
     for px, py in pillars:
         solids[py][px] = 1
 
     structures = [
-        # Petrified underground twisted roots flanking the cavern
+        # Petrified underground roots flanking the cavern
         StructureDef("tree_05", 16, 16),
         StructureDef("tree_05", 256, 16),
         StructureDef("tree_05", 16, 208),
         StructureDef("tree_05", 256, 208),
-        # Petrified dead spires
         StructureDef("tree_07", 112, 16),
+
+        # Free_1.1 Cavern decorations:
+        # Cave stairs leading up to deep forest
+        StructureDef("cave_stairs_up", 10 * 16, 1 * 16, is_ground=True),
+        # Cave exit leading to dungeon
+        StructureDef("cave_exit", 1 * 16, 9 * 16),
+        # Big water rock in cavern lake
+        StructureDef("rock_water_big", 3 * 16, 11 * 16),
+        # Stepping stones across the pool
+        StructureDef("stepping_stones", 4 * 16, 13 * 16, is_ground=True),
+        # Cave boulders
+        StructureDef("cave_boulder", 6 * 16, 12 * 16),
+        StructureDef("cave_boulder", 13 * 16, 6 * 16),
     ]
 
     props = [
-        ("rk", 5, 5), ("rk", 14, 5), ("rk", 5, 12), ("rk", 14, 12),
+        ("rk", 5, 5), ("rk", 14, 5), ("rk", 14, 12),
         ("rk", 8, 8), ("rk", 11, 8),
         ("bo", 9, 7), ("bo", 10, 7),
     ]
 
-    # Shadow King Boss NPC
     npcs = [
-        NPCDef("shadow", "Shadow King", "king.png", 10 * 16, 5 * 16,
+        NPCDef("shadow", "Shadow King", "king.png", 10 * 16, 4 * 16,
                "down", portrait="king", ocean_char_id="actor3_character_08",
                dialogues=[
                    {"text": "Who disturbs the eternal dusk?", "portrait": "king"},
                    {"text": "I am the shade of King Aldous... bound to this cavern.", "portrait": "king"},
-                   {"text": "Use the Shadow Crystal... break the seal and free us all!", "portrait": "king"}
+                   {"text": "Vanquish the Slime Sovereign and break the ancient curse!", "portrait": "king"}
                ]),
     ]
 
@@ -720,13 +852,21 @@ def build_grotto():
         ItemPickup("amulet", 6 * 16, 9 * 16, "sun_amulet"),
     ]
 
+    # Boss encounter: Slime Sovereign + Guardian Bats
+    enemies = [
+        Monster("slime_king", 8 * 16, 6 * 16, patrol_radius=50),
+        Monster("bat", 5 * 16, 4 * 16, patrol_radius=40),
+        Monster("bat", 14 * 16, 4 * 16, patrol_radius=40),
+    ]
+
     warps = [
-        WarpDef(10 * 16, 0, 16, 16, "deep_forest", 16 * 16, 16 * 16),
+        WarpDef(10 * 16, 0, 16, 16, "deep_forest", 15 * 16, 15 * 16),
+        WarpDef(0, 9 * 16, 16, 16, "dungeon", 14 * 16, 5 * 16),
     ]
 
     return GameMap("grotto", W, H, ground, solids, props, [],
                    npcs, warps, items, [], music="stg05 - Game Over.mp3",
-                   structures=structures)
+                   structures=structures, enemies=enemies)
 
 
 # -----------------------------------------------------------------------------

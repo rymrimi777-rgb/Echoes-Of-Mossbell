@@ -47,6 +47,7 @@ if not os.path.isdir(BUTTON_DIR):
 ENV_DIR       = os.path.join(ASSET_DIR, "environment")
 TREES_DIR     = os.path.join(ENV_DIR, "trees")
 BUILDINGS_DIR = os.path.join(ENV_DIR, "buildings")
+DECOR_DIR     = os.path.join(ENV_DIR, "decorations")
 MONSTERS_DIR  = os.path.join(ASSET_DIR, "monsters")
 BOSSES_DIR    = os.path.join(ASSET_DIR, "bosses")
 HUD_DIR       = os.path.join(UI_DIR, "hud")

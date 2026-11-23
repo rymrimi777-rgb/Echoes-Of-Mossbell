@@ -18,9 +18,13 @@ class Player:
         self.direction = "down"
         self.moving = False
 
-        # Health
+        # Health & Combat
         self.max_hp = 20
         self.hp = 20
+        self.attack_timer = 0
+        self.invulnerable_timer = 0
+        self.knockback_vx = 0.0
+        self.knockback_vy = 0.0
 
         # Collision rect at feet (10x6)
         self.col_offset_x = 3
@@ -62,6 +66,38 @@ class Player:
         self.hp = min(self.max_hp, self.hp + amount)
         return self.hp - prev
 
+    def attack(self):
+        """Triggers real-time sword slash attack."""
+        if self.attack_timer <= 0:
+            self.attack_timer = 180  # 180ms sword swing
+            return True
+        return False
+
+    def get_attack_rect(self):
+        """Returns 18x18 sword hitbox in front of player."""
+        if self.direction == "up":
+            return pygame.Rect(self.x - 2, self.y - 14, 20, 16)
+        elif self.direction == "down":
+            return pygame.Rect(self.x - 2, self.y + 14, 20, 16)
+        elif self.direction == "left":
+            return pygame.Rect(self.x - 14, self.y - 2, 16, 20)
+        else:
+            return pygame.Rect(self.x + 14, self.y - 2, 16, 20)
+
+    def take_damage(self, amount, knock_dir=None):
+        """Takes damage from enemy contact with invulnerability frames and knockback."""
+        if self.invulnerable_timer > 0:
+            return False
+
+        self.hp = max(0, self.hp - amount)
+        self.invulnerable_timer = 600  # 600ms invulnerability
+
+        if knock_dir:
+            self.knockback_vx = knock_dir[0] * 3.0
+            self.knockback_vy = knock_dir[1] * 3.0
+
+        return True
+
     def get_interact_box(self):
         """
         Returns a generous 22x20 pixel bounding box in front of the player,
@@ -87,6 +123,22 @@ class Player:
         return dist_sq <= (22 ** 2)
 
     def update(self, dt_ms, collision_map, touch_ctrl=None, audio_mgr=None):
+        if self.attack_timer > 0:
+            self.attack_timer -= dt_ms
+
+        if self.invulnerable_timer > 0:
+            self.invulnerable_timer -= dt_ms
+
+        # Apply knockback if active
+        if abs(self.knockback_vx) > 0.05 or abs(self.knockback_vy) > 0.05:
+            self.fx += self.knockback_vx
+            self.fy += self.knockback_vy
+            self.knockback_vx *= 0.80
+            self.knockback_vy *= 0.80
+            self.x = int(self.fx)
+            self.y = int(self.fy)
+            return
+
         keys = pygame.key.get_pressed()
         dx, dy = 0.0, 0.0
 
@@ -181,9 +233,33 @@ class Player:
         self.animator.update(dt_ms, self.moving, self.direction if self.moving else None)
 
     def draw(self, surface, camera):
-        frame = self.animator.get_frame()
-        fw, fh = frame.get_size()
-        draw_x = self.x - (fw - self.w) // 2
-        draw_y = self.y - (fh - self.h)
-        sx, sy = camera.apply(draw_x, draw_y)
-        surface.blit(frame, (sx, sy))
+        # Invulnerability flicker (flash every 60ms)
+        if self.invulnerable_timer > 0 and (self.invulnerable_timer // 60) % 2 == 1:
+            pass  # skip blitting for flicker effect
+        else:
+            frame = self.animator.get_frame()
+            fw, fh = frame.get_size()
+            draw_x = self.x - (fw - self.w) // 2
+            draw_y = self.y - (fh - self.h)
+            sx, sy = camera.apply(draw_x, draw_y)
+            surface.blit(frame, (sx, sy))
+
+        # Sword slash arc effect
+        if self.attack_timer > 0:
+            from game.settings import COLOR_LIGHTEST, COLOR_DARKEST
+            atk_rect = self.get_attack_rect()
+            asx, asy = camera.apply(atk_rect.x, atk_rect.y)
+            slash_surf = pygame.Surface((atk_rect.w, atk_rect.h), pygame.SRCALPHA)
+            if self.direction == "up":
+                pygame.draw.arc(slash_surf, COLOR_LIGHTEST, (1, 1, atk_rect.w - 2, atk_rect.h + 6), 0.2, 2.9, 3)
+                pygame.draw.arc(slash_surf, COLOR_DARKEST, (0, 0, atk_rect.w, atk_rect.h + 8), 0.2, 2.9, 1)
+            elif self.direction == "down":
+                pygame.draw.arc(slash_surf, COLOR_LIGHTEST, (1, -6, atk_rect.w - 2, atk_rect.h + 4), 3.3, 6.0, 3)
+                pygame.draw.arc(slash_surf, COLOR_DARKEST, (0, -8, atk_rect.w, atk_rect.h + 8), 3.3, 6.0, 1)
+            elif self.direction == "left":
+                pygame.draw.arc(slash_surf, COLOR_LIGHTEST, (1, 1, atk_rect.w + 6, atk_rect.h - 2), 1.7, 4.5, 3)
+                pygame.draw.arc(slash_surf, COLOR_DARKEST, (0, 0, atk_rect.w + 8, atk_rect.h), 1.7, 4.5, 1)
+            else:
+                pygame.draw.arc(slash_surf, COLOR_LIGHTEST, (-6, 1, atk_rect.w + 4, atk_rect.h - 2), 4.9, 1.4, 3)
+                pygame.draw.arc(slash_surf, COLOR_DARKEST, (-8, 0, atk_rect.w + 8, atk_rect.h), 4.9, 1.4, 1)
+            surface.blit(slash_surf, (asx, asy))

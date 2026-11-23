@@ -4,9 +4,10 @@ interior and dungeon tilesets, interactive objects, and warps.
 """
 import pygame, os
 from game.settings import (TILE_SIZE, TILE_DIR, SPRITE_DIR, COLOR_LIGHTEST, COLOR_DARKEST,
-                           ENV_DIR, TREES_DIR, BUILDINGS_DIR)
+                           ENV_DIR, TREES_DIR, BUILDINGS_DIR, DECOR_DIR)
 from game.animation import load_image, TileStripAnimator
 from game.collision import CollisionMap
+from game.asset_registry import DECORATION_CATALOG, STRUCTURE_CATALOG
 
 # ---- Global Tile Cache -----------------------------------------------------
 _tile_cache = {}
@@ -108,7 +109,7 @@ def get_big_prop(name):
     return _big_cache[name]
 
 
-# ---- Environment Assets & Structures (Trees & Village Buildings 48x48) ------
+# ---- Environment Assets & Structures (Trees & Village Buildings 48x48, Free_1.1 decor) ------
 _env_cache = {}
 
 ENV_ASSET_MAP = {
@@ -142,6 +143,14 @@ ENV_ASSET_MAP = {
     "bldg_14": os.path.join(BUILDINGS_DIR, "building_14_small_cottage.png"),
 }
 
+# Add decorations from DECORATION_CATALOG
+for _k, _info in DECORATION_CATALOG.items():
+    _f = _info.get("file")
+    if _f:
+        ENV_ASSET_MAP[_k] = os.path.join(DECOR_DIR, _f)
+        _base = os.path.splitext(_f)[0]
+        ENV_ASSET_MAP[_base] = os.path.join(DECOR_DIR, _f)
+
 # Register alternate naming aliases
 for _k, _p in list(ENV_ASSET_MAP.items()):
     _base = os.path.splitext(os.path.basename(_p))[0]
@@ -151,13 +160,13 @@ for _k, _p in list(ENV_ASSET_MAP.items()):
 
 
 def get_env_prop(asset_id):
-    """Retrieve 48x48 transparent surface for tree or building."""
+    """Retrieve transparent surface for tree, building, or environmental decoration."""
     if asset_id in _env_cache:
         return _env_cache[asset_id]
 
     path = ENV_ASSET_MAP.get(asset_id)
     if not path or not os.path.isfile(path):
-        for d in (TREES_DIR, BUILDINGS_DIR):
+        for d in (DECOR_DIR, TREES_DIR, BUILDINGS_DIR):
             cand = os.path.join(d, f"{asset_id}.png")
             if os.path.isfile(cand):
                 path = cand
@@ -168,7 +177,12 @@ def get_env_prop(asset_id):
     else:
         if asset_id in ("tr", "td"):
             return get_big_prop(asset_id)
-        s = pygame.Surface((48, 48), pygame.SRCALPHA)
+        # Default placeholder if missing
+        w, h = 48, 48
+        if asset_id in DECORATION_CATALOG:
+            w = DECORATION_CATALOG[asset_id].get("w", 16)
+            h = DECORATION_CATALOG[asset_id].get("h", 16)
+        s = pygame.Surface((w, h), pygame.SRCALPHA)
         s.fill((48, 98, 48, 255))
         _env_cache[asset_id] = s
 
@@ -177,19 +191,36 @@ def get_env_prop(asset_id):
 
 class StructureDef:
     """
-    Environmental structure (tree, building, landmark) in the world.
-    Native resolution: 48x48 (3x3 tiles).
+    Environmental structure or decoration in the world.
+    Supports trees (48x48), buildings (48x48), bridges, and Free_1.1 decorations.
     Supports custom collision boxes and depth-sorting base_y.
     """
-    def __init__(self, asset_id, px, py, col_boxes=None, depth_offset=38, is_ground=False):
+    def __init__(self, asset_id, px, py, col_boxes=None, depth_offset=None, is_ground=None, w=None, h=None):
         self.asset_id = asset_id
         self.px = px
         self.py = py
-        self.w = 48
-        self.h = 48
-        self.is_ground = is_ground
-        self.depth_offset = depth_offset
-        self.base_y = py + depth_offset
+
+        # Determine dimensions and is_ground from catalogs if not explicit
+        if asset_id in DECORATION_CATALOG:
+            info = DECORATION_CATALOG[asset_id]
+            self.w = w if w is not None else info.get("w", 16)
+            self.h = h if h is not None else info.get("h", 16)
+            self.is_ground = is_ground if is_ground is not None else info.get("is_ground", False)
+        elif asset_id in STRUCTURE_CATALOG:
+            info = STRUCTURE_CATALOG[asset_id]
+            self.w = w if w is not None else info.get("w", 48)
+            self.h = h if h is not None else info.get("h", 48)
+            self.is_ground = is_ground if is_ground is not None else (info.get("type") == "bridge")
+        else:
+            self.w = w if w is not None else 48
+            self.h = h if h is not None else 48
+            self.is_ground = bool(is_ground)
+
+        if depth_offset is not None:
+            self.depth_offset = depth_offset
+        else:
+            self.depth_offset = self.h if self.is_ground else max(0, self.h - 8)
+        self.base_y = py + self.depth_offset
 
         # Build collision rects
         if col_boxes is False:
@@ -200,38 +231,49 @@ class StructureDef:
             self.col_rects = [pygame.Rect(px + ox, py + oy, cw, ch) for (ox, oy, cw, ch) in col_boxes]
         else:
             # Default collision box according to asset category
-            if self.is_ground or asset_id in ("bldg_13", "building_13", "building_13_bridge"):
-                # Bridges and ground overlays are walkable
+            if self.is_ground or asset_id in ("bldg_13", "building_13", "building_13_bridge",
+                                              "bridge_h", "bridge_v", "bridge_horizontal", "bridge_vertical",
+                                              "stepping_stones", "stepping_stones_water",
+                                              "tall_grass", "reeds", "cave_stairs_up", "cave_stairs_down"):
                 self.col_rects = []
             elif asset_id.startswith("tree_") or asset_id.startswith("t_"):
-                # Tree trunk collision: player can walk around trunk and behind canopy
                 self.col_rects = [pygame.Rect(px + 18, py + 32, 12, 12)]
+            elif asset_id == "pine_tall":
+                self.col_rects = [pygame.Rect(px + 4, py + 20, 8, 12)]
+            elif asset_id in ("cave_boulder",):
+                self.col_rects = [pygame.Rect(px, py, 16, 16)]
+            elif asset_id in ("cave_entrance",):
+                # Flanking stone walls, center doorway open
+                self.col_rects = [pygame.Rect(px, py, 16, 32), pygame.Rect(px + 32, py, 16, 32)]
+            elif asset_id in ("cave_exit",):
+                self.col_rects = [pygame.Rect(px, py, 8, 16), pygame.Rect(px + 24, py, 8, 16)]
+            elif asset_id in ("bench_h", "bench_horizontal"):
+                self.col_rects = [pygame.Rect(px + 2, py + 4, 28, 12)]
+            elif asset_id in ("lampost",):
+                self.col_rects = [pygame.Rect(px + 4, py + 36, 8, 12)]
+            elif asset_id in ("fence_picket",):
+                self.col_rects = [pygame.Rect(px + 2, py + 24, 20, 24)]
+            elif asset_id in ("signpost_wood", "signpost"):
+                self.col_rects = [pygame.Rect(px + 8, py + 6, 16, 10)]
+            elif asset_id in ("rock_water_big",):
+                self.col_rects = [pygame.Rect(px + 2, py + 4, 28, 24)]
             elif asset_id in ("bldg_04", "building_04", "building_04_fountain"):
-                # Fountain stone basin
                 self.col_rects = [pygame.Rect(px + 8, py + 18, 32, 22)]
             elif asset_id in ("bldg_09", "building_09", "building_09_well"):
-                # Water well
                 self.col_rects = [pygame.Rect(px + 8, py + 16, 32, 22)]
             elif asset_id in ("bldg_03", "building_03", "building_03_castle_tower"):
-                # Tower stone base
                 self.col_rects = [pygame.Rect(px + 12, py + 26, 24, 20)]
             elif asset_id in ("bldg_08", "building_08", "building_08_mushroom_tower"):
-                # Mushroom stalk
                 self.col_rects = [pygame.Rect(px + 14, py + 28, 20, 18)]
             elif asset_id in ("bldg_10", "building_10", "building_10_cart_or_shed"):
-                # Wooden cart
                 self.col_rects = [pygame.Rect(px + 12, py + 18, 24, 20)]
             elif asset_id in ("bldg_07", "building_07", "building_07_market_stall"):
-                # Market counter
                 self.col_rects = [pygame.Rect(px + 6, py + 20, 36, 18)]
             elif asset_id in ("bldg_01", "building_01", "building_01_fenced_garden"):
-                # Garden fence
                 self.col_rects = [pygame.Rect(px + 6, py + 16, 36, 26)]
             elif asset_id in ("bldg_05", "building_05", "building_05_ruined_wall"):
-                # Ruined stone wall
                 self.col_rects = [pygame.Rect(px + 6, py + 18, 36, 18)]
             else:
-                # Standard cottage / house / barn (solid base, open for walk-behind roof)
                 self.col_rects = [pygame.Rect(px + 6, py + 22, 36, 22)]
 
     def get_surface(self):
@@ -287,7 +329,8 @@ class InteractiveObject:
 class GameMap:
     def __init__(self, map_id, width, height, ground, solids,
                  props=None, big_props=None, npcs=None, warps=None,
-                 items=None, interactives=None, music=None, structures=None):
+                 items=None, interactives=None, music=None, structures=None,
+                 enemies=None):
         self.map_id = map_id
         self.width = width
         self.height = height
@@ -300,6 +343,7 @@ class GameMap:
         self.items = items or []
         self.interactives = interactives or []
         self.music = music
+        self.enemies = enemies or []
 
         # Build collision grid
         self.collision = CollisionMap(width, height)
@@ -307,6 +351,20 @@ class GameMap:
             for tx, val in enumerate(row):
                 if val:
                     self.collision.set_solid(tx, ty)
+
+        # Ground bridge crossings make underlying tiles walkable
+        for st in self.structures:
+            if getattr(st, "is_ground", False) and st.asset_id in (
+                "bridge_h", "bridge_v", "bridge_horizontal", "bridge_vertical",
+                "stepping_stones", "stepping_stones_water", "bldg_13", "building_13", "building_13_bridge"
+            ):
+                tx_s = st.px // TILE_SIZE
+                ty_s = st.py // TILE_SIZE
+                tx_e = (st.px + st.w - 1) // TILE_SIZE
+                ty_e = (st.py + st.h - 1) // TILE_SIZE
+                for by in range(ty_s, ty_e + 1):
+                    for bx in range(tx_s, tx_e + 1):
+                        self.collision.set_solid(bx, by, False)
 
         # Big props collision (lower half)
         for pid, px, py in self.big_props:

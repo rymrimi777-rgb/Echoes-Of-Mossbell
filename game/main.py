@@ -2,7 +2,7 @@
 Echoes of Mossbell – A Retro Handheld RPG
 Main Game Engine, State Machine, Map Transitions, and Enhanced Input Integration.
 """
-import pygame, sys, os, time, asyncio
+import pygame, sys, os, time, asyncio, math
 
 # Ensure project root is in sys.path
 if getattr(sys, "frozen", False):
@@ -157,16 +157,56 @@ class Game:
 
     def _interact(self):
         target = self._get_nearby_target()
-        if not target:
+        if target:
+            kind, entity = target
+            if kind == "npc":
+                self._talk_to_npc(entity)
+            elif kind == "obj":
+                self._examine_object(entity)
+            elif kind == "item":
+                self._pickup_item(entity)
+        else:
+            self._player_attack()
+
+    def _player_attack(self):
+        swung = self.player.attack()
+        if not swung:
             return
 
-        kind, entity = target
-        if kind == "npc":
-            self._talk_to_npc(entity)
-        elif kind == "obj":
-            self._examine_object(entity)
-        elif kind == "item":
-            self._pickup_item(entity)
+        self.audio.play_sfx("sword_swing.wav", "combat")
+        atk_rect = self.player.get_attack_rect()
+
+        if hasattr(self.current_map, "enemies"):
+            for enemy in list(self.current_map.enemies):
+                if enemy.is_alive and enemy.hit_rect.colliderect(atk_rect):
+                    ex = enemy.x + enemy.fw // 2
+                    ey = enemy.y + enemy.fh // 2
+                    px, py = self.player.center_x, self.player.center_y
+                    dist = max(1.0, math.hypot(ex - px, ey - py))
+                    k_dir = ((ex - px) / dist, (ey - py) / dist)
+
+                    dmg = 4 if self.inventory.has("sword") else 2
+                    killed = enemy.take_damage(dmg, k_dir)
+                    self.audio.play_sfx("hit_enemy.wav", "combat")
+
+                    if killed:
+                        self.notification.show(f"Defeated {enemy.name}!")
+                        if enemy.loot:
+                            self.inventory.add(enemy.loot, 1)
+                            self.notification.show(f"Obtained {enemy.loot}!")
+                            self.audio.play_sfx("item_pickup", "items")
+                        if getattr(enemy, "ai_type", "") == "boss":
+                            self.audio.play_sfx("boss_roar.wav", "combat")
+                            self.notification.show("The Slime Sovereign has fallen!")
+                            self.flags["boss_defeated"] = True
+                            if not self.inventory.has("sun_amulet"):
+                                self.inventory.add("sun_amulet", 1)
+
+    def _handle_player_faint(self):
+        self.notification.show("You collapsed! Restored to safety at home.")
+        self.audio.play_sfx("door_open", "environment")
+        self.player.hp = self.player.max_hp // 2
+        self.change_map("player_house", 5 * TILE_SIZE, 5 * TILE_SIZE)
 
     def _examine_object(self, obj):
         self.audio.play_sfx("menu_select", "ui")
@@ -543,6 +583,23 @@ class Game:
             for npc_id, anim in self.npc_animators.items():
                 anim.update(dt_ms, False, None)
 
+            # Enemies update & combat collision
+            if hasattr(self.current_map, "enemies"):
+                for enemy in self.current_map.enemies:
+                    enemy.update(dt_ms, self.player, self.current_map.collision)
+                    if enemy.is_alive and self.player.col_rect.colliderect(enemy.col_rect):
+                        ex = enemy.x + enemy.fw // 2
+                        ey = enemy.y + enemy.fh // 2
+                        px, py = self.player.center_x, self.player.center_y
+                        dist = max(1.0, math.hypot(px - ex, py - ey))
+                        k_dir = ((px - ex) / dist, (py - ey) / dist)
+
+                        hurt = self.player.take_damage(enemy.atk, k_dir)
+                        if hurt:
+                            self.audio.play_sfx("hurt.wav", "player")
+                            if self.player.hp <= 0:
+                                self._handle_player_faint()
+
             # Warps check
             for warp in self.current_map.warps:
                 if self.player.col_rect.colliderect(warp.rect):
@@ -612,6 +669,12 @@ class Game:
                 anim = self.npc_animators.get(npc.npc_id)
                 if anim:
                     render_items.append((npc.y, "npc", npc, anim))
+
+            if hasattr(self.current_map, "enemies"):
+                for enemy in self.current_map.enemies:
+                    if enemy.is_alive or enemy.death_timer > 0:
+                        render_items.append((enemy.y + enemy.fh, "enemy", enemy, None))
+
             render_items.append((self.player.y, "player", self.player, None))
             render_items.sort(key=lambda it: it[0])
 
@@ -627,6 +690,8 @@ class Game:
                     draw_y = entity.y - (fh - 16)
                     sx, sy = self.camera.apply(draw_x, draw_y)
                     self.native.blit(frame, (sx, sy))
+                elif kind == "enemy":
+                    entity.draw(self.native, self.camera)
                 else:
                     self.player.draw(self.native, self.camera)
 
