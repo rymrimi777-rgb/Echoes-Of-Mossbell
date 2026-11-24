@@ -24,19 +24,22 @@ from game.audio import AudioManager
 from game.save_system import SaveSystem
 from game.ui import (UIRenderer, TitleScreen, PauseMenu, InventoryScreen,
                      QuestScreen, TransitionEffect, NotificationPopup)
+from game.character_select import CharacterSelectScreen
+from game.character_registry import get_character, get_default_character_id
 from game.touch_controls import TouchController
 from game.fonts import font_tag
 from game.map_loader import update_tile_animators
 from game.world import build_all_maps
 
 # States
-STATE_TITLE      = "title"
-STATE_PLAY       = "play"
-STATE_PAUSE      = "pause"
-STATE_DIALOGUE   = "dialogue"
-STATE_INVENTORY  = "inventory"
-STATE_QUESTS     = "quests"
-STATE_TRANSITION = "transition"
+STATE_TITLE       = "title"
+STATE_CHAR_SELECT = "char_select"
+STATE_PLAY        = "play"
+STATE_PAUSE       = "pause"
+STATE_DIALOGUE    = "dialogue"
+STATE_INVENTORY   = "inventory"
+STATE_QUESTS      = "quests"
+STATE_TRANSITION  = "transition"
 
 
 class Game:
@@ -79,9 +82,16 @@ class Game:
         self.current_map_id = "village"
         self.current_map = self.maps[self.current_map_id]
 
-        # Player & Camera
-        self.player = Player(10 * TILE_SIZE, 9 * TILE_SIZE)
+        # Player & Camera (Restores previously selected character)
+        saved_char = self.save_sys.get_selected_character()
+        self.player = Player(10 * TILE_SIZE, 9 * TILE_SIZE, character_id=saved_char)
         self.camera = Camera(self.current_map.width, self.current_map.height)
+
+        # Character Selection Screen
+        self.char_select = CharacterSelectScreen(self.ui, initial_char_id=saved_char)
+        self.char_select_origin = "new_game"
+        self.view_scale = 1.0
+        self.view_offset = (0, 0)
 
         # NPC Animators
         self.npc_animators = {}
@@ -98,6 +108,15 @@ class Game:
         self.running = True
 
         self.audio.play_music("stg01 - Title Screen.mp3")
+
+    def window_to_native(self, wx, wy):
+        """Converts window/screen pixel coordinates to native 160x144 Game Boy space."""
+        vx, vy = self.view_offset
+        if self.view_scale <= 0:
+            return 0, 0
+        nx = int((wx - vx) / self.view_scale)
+        ny = int((wy - vy) / self.view_scale)
+        return max(0, min(GAME_W - 1, nx)), max(0, min(GAME_H - 1, ny))
 
     def _load_npc_animators(self):
         self.npc_animators = {}
@@ -384,6 +403,8 @@ class Game:
             "player_y": self.player.y,
             "player_dir": self.player.direction,
             "player_hp": self.player.hp,
+            "character_id": self.player.character_id,
+            "variant": self.player.variant,
             "current_map": self.current_map_id,
             "inventory": self.inventory.to_dict(),
             "quests": self.quest_mgr.to_dict(),
@@ -398,6 +419,9 @@ class Game:
         data = self.save_sys.load()
         if not data:
             return False
+        char_id = data.get("character_id") or self.save_sys.get_selected_character()
+        self.player.set_character(char_id, variant=data.get("variant", "gameboy"))
+        self.char_select.set_by_id(char_id)
         self.change_map(data.get("current_map", "village"), data.get("player_x", 160), data.get("player_y", 144))
         self.player.direction = data.get("player_dir", "down")
         self.player.hp = data.get("player_hp", 20)
@@ -407,14 +431,16 @@ class Game:
         self.play_time = data.get("play_time", 0)
         return True
 
-    def _new_game(self):
+    def _new_game(self, character_id=None):
         self.inventory = Inventory()
         self.inventory.add("bread", 1)
         self.quest_mgr = QuestManager()
         self.flags = {}
         self.play_time = 0.0
         self.change_map("village", 10 * TILE_SIZE, 9 * TILE_SIZE)
-        self.player = Player(10 * TILE_SIZE, 9 * TILE_SIZE)
+        char_id = character_id or self.save_sys.get_selected_character()
+        self.player = Player(10 * TILE_SIZE, 9 * TILE_SIZE, character_id=char_id)
+        self.char_select.set_by_id(char_id)
         self.quest_mgr.start("main")
         self.quest_mgr.start("herbs")
         self.quest_mgr.start("ring")
@@ -456,6 +482,12 @@ class Game:
 
             if self.state == STATE_TITLE:
                 self.title_screen.handle_event(event)
+            elif self.state == STATE_CHAR_SELECT:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    nx, ny = self.window_to_native(*event.pos)
+                    self.char_select.handle_pointer_down(nx, ny, audio_mgr=self.audio)
+                else:
+                    self.char_select.handle_event(event, audio_mgr=self.audio)
             elif self.state == STATE_PLAY:
                 if event.type == pygame.KEYDOWN:
                     if event.key in KEYS_PAUSE:
@@ -549,6 +581,26 @@ class Game:
                 dummy_space = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE)
                 self.title_screen.handle_event(dummy_space)
 
+        elif self.state == STATE_CHAR_SELECT:
+            if self.touch_ctrl.consume_left():
+                dummy = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT)
+                self.char_select.handle_event(dummy, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_right():
+                dummy = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHT)
+                self.char_select.handle_event(dummy, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_up():
+                dummy = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_UP)
+                self.char_select.handle_event(dummy, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_down():
+                dummy = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN)
+                self.char_select.handle_event(dummy, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_a() or self.touch_ctrl.consume_start():
+                dummy_enter = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+                self.char_select.handle_event(dummy_enter, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_b() or self.touch_ctrl.consume_select():
+                dummy_esc = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+                self.char_select.handle_event(dummy_esc, audio_mgr=self.audio)
+
     def _update(self, dt_ms):
         self.touch_ctrl.update(dt_ms)
         self.notification.update(dt_ms)
@@ -568,11 +620,39 @@ class Game:
                     else:
                         self.title_screen.done = False
                 elif choice == "NEW GAME":
-                    self._new_game()
-                    self.state = STATE_PLAY
+                    self.char_select_origin = "new_game"
+                    self.char_select.reset(self.player.character_id)
+                    self.state = STATE_CHAR_SELECT
+                    self.title_screen.done = False
+                    self.audio.play_sfx("menu_select", "ui")
+                elif choice == "SELECT HERO":
+                    self.char_select_origin = "title"
+                    self.char_select.reset(self.player.character_id)
+                    self.state = STATE_CHAR_SELECT
+                    self.title_screen.done = False
                     self.audio.play_sfx("menu_select", "ui")
                 elif choice == "QUIT":
                     self.running = False
+
+        elif self.state == STATE_CHAR_SELECT:
+            self.char_select.update(dt_ms)
+            if self.char_select.done:
+                if not self.char_select.canceled:
+                    chosen_id = self.char_select.get_selected_id()
+                    self.save_sys.save_selected_character(chosen_id)
+                    self.player.set_character(chosen_id)
+                    if self.char_select_origin == "new_game":
+                        self._new_game(character_id=chosen_id)
+                        self.state = STATE_PLAY
+                        self.audio.play_sfx("menu_select", "ui")
+                    else:
+                        self.state = STATE_TITLE
+                        self.title_screen.done = False
+                        self.audio.play_sfx("menu_select", "ui")
+                else:
+                    self.state = STATE_TITLE
+                    self.title_screen.done = False
+                    self.audio.play_sfx("menu_cancel", "ui")
 
         elif self.state == STATE_PLAY:
             self.play_time += dt_ms / 1000.0
@@ -649,6 +729,9 @@ class Game:
 
         if self.state == STATE_TITLE:
             self.title_screen.draw(self.native)
+
+        elif self.state == STATE_CHAR_SELECT:
+            self.char_select.draw(self.native)
 
         elif self.state in (STATE_PLAY, STATE_PAUSE, STATE_DIALOGUE, STATE_TRANSITION):
             # Draw world layers
@@ -734,6 +817,8 @@ class Game:
         view_h = int(GAME_H * scale)
         view_x = (scr_w - view_w) // 2
         view_y = 0 if scr_h > (scr_w * 1.1) else (scr_h - view_h) // 2
+        self.view_scale = scale
+        self.view_offset = (view_x, view_y)
 
         self.screen.fill((9, 27, 29))  # Dark retro letterbox border
         scaled = pygame.transform.scale(self.native, (view_w, view_h))

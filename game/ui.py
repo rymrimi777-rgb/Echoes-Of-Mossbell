@@ -58,6 +58,7 @@ class TitleScreen:
         self.options = ["NEW GAME"]
         if save_exists:
             self.options.insert(0, "CONTINUE")
+        self.options.append("SELECT HERO")
         self.options.append("QUIT")
         self.index = 0
         self.done = False
@@ -85,21 +86,22 @@ class TitleScreen:
     def draw(self, surface):
         surface.fill(COLOR_LIGHTEST)
         # Main Game Title (Press Start 2P)
-        self.ui.draw_text_centered(surface, "ECHOES OF", 24, COLOR_DARKEST, font_title())
-        self.ui.draw_text_centered(surface, "MOSSBELL", 40, COLOR_DARKEST, font_title())
+        self.ui.draw_text_centered(surface, "ECHOES OF", 20, COLOR_DARKEST, font_title())
+        self.ui.draw_text_centered(surface, "MOSSBELL", 35, COLOR_DARKEST, font_title())
         # Subtitle (Pixel Operator)
-        self.ui.draw_text_centered(surface, "A Retro Handheld RPG", 58, COLOR_DARK, font_body())
+        self.ui.draw_text_centered(surface, "A Retro Handheld RPG", 51, COLOR_DARK, font_body())
 
         # Menu Options (Press Start 2P)
-        start_y = 80
+        start_y = 69
+        spacing = 13 if len(self.options) > 3 else 14
         for i, opt in enumerate(self.options):
             prefix = "> " if i == self.index else "  "
             color = COLOR_DARKEST if i == self.index else COLOR_DARK
-            self.ui.draw_text_centered(surface, prefix + opt, start_y + i * 14, color, font_subheading())
+            self.ui.draw_text_centered(surface, prefix + opt, start_y + i * spacing, color, font_subheading())
 
         # Start prompt (Press Start 2P)
         if self.show_press:
-            self.ui.draw_text_centered(surface, "[SPACE] START", 128, COLOR_DARK, font_tag())
+            self.ui.draw_text_centered(surface, "[SPACE] START", 126, COLOR_DARK, font_tag())
 
 
 class PauseMenu:

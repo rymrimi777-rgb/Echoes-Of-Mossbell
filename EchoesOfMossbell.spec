@@ -5,7 +5,7 @@ a = Analysis(
     ['game/main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('saves', 'saves'), ('Ocean_Nostalgia_Pygame_Ready', 'Ocean_Nostalgia_Pygame_Ready')],
+    datas=[('assets', 'assets'), ('saves', 'saves'), ('Ocean_Nostalgia_Pygame_Ready', 'Ocean_Nostalgia_Pygame_Ready'), ('Echoes_Of_Mossbell_Individual_Characters', 'Echoes_Of_Mossbell_Individual_Characters')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
