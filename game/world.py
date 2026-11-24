@@ -247,13 +247,15 @@ def build_village():
 
 
 # -----------------------------------------------------------------------------
-# 2. PLAYER HOUSE INTERIOR (12 x 10 tiles)
+# 2. PLAYER HOUSE INTERIOR (12 x 10 tiles) - Simple, Quiet Game Boy Room
 # -----------------------------------------------------------------------------
 def build_player_house():
     W, H = 12, 10
+    # Clean, authentic wooden floorboards across the entire room
     ground = _fill(W, H, "in_3_0")
     solids = _fill(W, H, 0)
 
+    # Perimeter walls: top wall is 2 tiles high (rows 0 and 1)
     for tx in range(W):
         solids[0][tx] = 1
         solids[1][tx] = 1
@@ -262,41 +264,34 @@ def build_player_house():
         solids[ty][0] = 1
         solids[ty][W - 1] = 1
 
+    # South doorway open for leaving to the village
     solids[H - 1][5] = 0
 
+    # Back wall wooden paneling
     for tx in range(1, W - 1):
         ground[0][tx] = "in_0_0"
         ground[1][tx] = "in_1_0"
 
-    for rx in range(4, 8):
-        for ry in range(4, 7):
-            ground[ry][rx] = "p1"
-
+    # Only TWO fixed, carefully chosen objects:
+    # 1. One Wooden Bed (top-left, tiles (2, 2) and (3, 2))
+    # 2. One Wooden Storage Chest (top-right, tile (9, 2))
     props = [
-        ("in_2_1", 2, 2), ("in_2_2", 3, 2),
-        ("in_0_4", 8, 2), ("in_1_4", 8, 3),
-        ("in_0_6", 5, 1), ("in_1_6", 5, 2),
-        ("in_4_3", 5, 5), ("in_4_4", 6, 5),
-        ("ch", 10, 2),
+        ("in_2_1", 2, 2), ("in_2_2", 3, 2),  # Single wooden bed
+        ("ch", 9, 2),                         # Single wooden storage chest
     ]
 
     interactives = [
         InteractiveObject(2 * 16, 2 * 16, 2 * 16, 16, [
-            "Your comfortable bed.",
-            "You rest and recover your stamina. HP fully restored!"
+            "Your simple wooden bed.",
+            "You rest peacefully. HP fully restored!"
         ], on_interact="heal_player"),
-        InteractiveObject(8 * 16, 2 * 16, 16, 2 * 16, [
-            "Bookshelf:",
-            "'Tales of the Ancient Seal - Chapter 3:'",
-            "'The Shadow Grotto lies hidden where the dead trees meet the eastern mists.'"
-        ]),
-        InteractiveObject(5 * 16, 1 * 16, 16, 2 * 16, [
-            "The hearth fire burns warmly, filling the room with cedar aroma."
+        InteractiveObject(9 * 16, 2 * 16, 16, 16, [
+            "A sturdy wooden storage chest for your journey."
         ]),
     ]
 
     items = [
-        ItemPickup("apple", 10 * 16, 2 * 16, "house_apple"),
+        ItemPickup("apple", 9 * 16, 2 * 16, "house_apple"),
     ]
 
     warps = [
