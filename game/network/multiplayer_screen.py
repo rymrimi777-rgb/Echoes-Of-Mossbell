@@ -351,6 +351,10 @@ class MultiplayerLobbyScreen:
             err = str(room_id)
             if "API_KEY_REQUIRED" in err:
                 self.status_message = "Need firebase_config.json!"
+            elif "OPERATION_NOT_ALLOWED" in err or "ADMIN_ONLY_OPERATION" in err:
+                self.status_message = "Enable Anon Auth in FB!"
+            elif "Permission denied" in err:
+                self.status_message = "Publish DB Rules in FB!"
             else:
                 self.status_message = err[:24]
 

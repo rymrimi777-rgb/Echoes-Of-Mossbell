@@ -11,8 +11,9 @@ FIREBASE_PROJECT_ID = "echoes-of-mossbell"
 FIREBASE_DATABASE_URL = "https://echoes-of-mossbell-default-rtdb.firebaseio.com"
 
 # Web API Key for Identity Toolkit (Anonymous Auth)
-# Can be overridden via environment variable, local config file, or user input.
-_DEFAULT_API_KEY = os.environ.get("FIREBASE_API_KEY", "")
+# Public client identifier for Firebase project 'echoes-of-mossbell';
+# can still be overridden via FIREBASE_API_KEY env var or saves/firebase_config.json.
+_DEFAULT_API_KEY = os.environ.get("FIREBASE_API_KEY", "AIzaSyA9T1e9noxiazIRtvnp4eSU5yiFlhRFHmA")
 
 
 def get_config_file_path():
