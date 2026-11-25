@@ -5,16 +5,13 @@ Handles automatic token expiration recovery (HTTP 401) and atomic conditional op
 100% standard library (urllib.request).
 """
 import json
-import ssl
 import urllib.request
 import urllib.error
 import urllib.parse
 from game.network.firebase_config import FIREBASE_DATABASE_URL
+from game.network.ssl_helper import get_ssl_context
 
-try:
-    _SSL_CTX = ssl.create_default_context()
-except Exception:
-    _SSL_CTX = None
+_SSL_CTX = get_ssl_context()
 
 
 class FirebaseClient:

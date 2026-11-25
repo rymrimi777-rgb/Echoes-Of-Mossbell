@@ -13,7 +13,7 @@ package.domain = org.mossbellgames
 source.dir = .
 
 # (list) Source files to include (empty = include all matching extensions)
-source.include_exts = py,png,jpg,jpeg,ttf,otf,json,mp3,wav,ogg,txt
+source.include_exts = py,png,jpg,jpeg,ttf,otf,json,mp3,wav,ogg,txt,pem
 
 # (list) List of directories to include
 source.include_patterns = assets/*,game/*,Ocean_Nostalgia_Pygame_Ready/characters/*
@@ -28,8 +28,8 @@ source.exclude_patterns = *.spec, *.bat, *.zip, *.md, *.txt, err.txt, screenshot
 version = 1.1.0
 
 # (list) Application requirements
-# pygame 2.1.0 runs on python-for-android via sdl2 bootstrap
-requirements = python3==3.10.11,hostpython3==3.10.11,pygame
+# pygame 2.1.0 runs on python-for-android via sdl2 bootstrap; certifi/openssl provide TLS CAs
+requirements = python3==3.10.11,hostpython3==3.10.11,pygame,openssl,certifi
 
 # (str) Supported orientation (landscape, sensorLandscape, portrait, sensorPortrait or all)
 orientation = all

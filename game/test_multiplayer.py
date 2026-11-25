@@ -380,8 +380,34 @@ def run_multiplayer_tests():
     assert ok_412 is False and err_412 == "PRECONDITION_FAILED"
     print("Unauthenticated block and 412 ETag precondition enforcement verified!")
 
+    # 13. Strict SSL Helper, Error Formatting & Landscape Touch Layout
+    print("\n13. Testing Strict SSL Context, Error Formatting & Landscape Touch Layout...")
+    import ssl
+    from game.network.ssl_helper import get_ssl_context
+    import game.network.firebase_auth as fb_auth_mod
+    import game.network.firebase_client as fb_client_mod
+    from game.touch_controls import TouchController
+
+    ctx = get_ssl_context()
+    assert ctx is not None and ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname is True
+    assert fb_auth_mod._SSL_CTX is not None and fb_client_mod._SSL_CTX is not None
+
+    assert lobby_err._format_network_error(
+        "AUTH_ERROR: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed>"
+    ) == "SSL Cert Verify Error!"
+    assert lobby_err._format_network_error(
+        "AUTH_ERROR: <urlopen error [Errno -2] Name or service not known>"
+    ) == "No Internet / DNS!"
+
+    tc = TouchController(1600, 720)
+    view_w = int(160 * (720 / 144))
+    view_x = (1600 - view_w) // 2
+    assert tc.buttons["select"].rect.right <= view_x, "Landscape SELECT overlaps game frame!"
+    assert tc.buttons["start"].rect.left >= view_x + view_w, "Landscape START overlaps game frame!"
+    print("Strict SSL context, readable errors, and gutter TouchController layout verified!")
+
     print("\n" + "=" * 65)
-    print("=== ALL 12 MULTIPLAYER SECURITY TESTS PASSED WITH 100% SUCCESS! ===")
+    print("=== ALL 13 MULTIPLAYER SECURITY TESTS PASSED WITH 100% SUCCESS! ===")
     print("=" * 65)
 
 

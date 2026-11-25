@@ -7,18 +7,15 @@ securely store tokens, and automatically refresh expired ID tokens.
 import os
 import json
 import time
-import ssl
 import urllib.request
 import urllib.error
 import urllib.parse
 from game.network.firebase_config import load_api_key, save_api_key
+from game.network.ssl_helper import get_ssl_context
 from game.settings import SAVE_DIR
 
-# SSL context for cross-platform HTTPS (works on Windows, Linux, Android)
-try:
-    _SSL_CTX = ssl.create_default_context()
-except Exception:
-    _SSL_CTX = None
+# Shared strict SSL context for cross-platform HTTPS (Windows, Linux, Android)
+_SSL_CTX = get_ssl_context()
 
 
 class FirebaseAuth:

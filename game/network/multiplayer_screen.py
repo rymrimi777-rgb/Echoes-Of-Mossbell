@@ -337,6 +337,26 @@ class MultiplayerLobbyScreen:
 
         return False
 
+    def _format_network_error(self, err_val):
+        """Convert raw network/Firebase errors into clear, Game Boy-width messages."""
+        err = str(err_val)
+        upper = err.upper()
+        if "API_KEY_REQUIRED" in err:
+            return "Need firebase_config.json!"
+        if "OPERATION_NOT_ALLOWED" in err or "ADMIN_ONLY_OPERATION" in err:
+            return "Enable Anon Auth!"
+        if "PERMISSION_DENIED" in upper or "PERMISSION DENIED" in upper:
+            return "Publish DB Rules!"
+        if "CERTIFICATE_VERIFY_FAILED" in upper or "SSL:" in upper or "SSLERROR" in upper:
+            return "SSL Cert Verify Error!"
+        if any(k in upper for k in ("GAIERROR", "NAMERESOLUTION", "NAME OR SERVICE", "NODENAME", "NO ADDRESS")):
+            return "No Internet / DNS!"
+        if "TIMED OUT" in upper or "TIMEOUT" in upper:
+            return "Network Timeout!"
+        if "CONNECTION" in upper or "UNREACHABLE" in upper or "URLOPEN" in upper:
+            return "Net Err: Check WiFi!"
+        return err[:22]
+
     def _start_create_room(self, audio_mgr):
         char_name = get_character(self.character_id)["name"]
         ok, room_id = self.room_mgr.create_room(self.character_id, player_name=char_name)
@@ -348,15 +368,7 @@ class MultiplayerLobbyScreen:
                 audio_mgr.play_sfx("menu_select", "ui")
         else:
             self.is_error = True
-            err = str(room_id)
-            if "API_KEY_REQUIRED" in err:
-                self.status_message = "Need firebase_config.json!"
-            elif "OPERATION_NOT_ALLOWED" in err or "ADMIN_ONLY_OPERATION" in err:
-                self.status_message = "Enable Anon Auth in FB!"
-            elif "Permission denied" in err:
-                self.status_message = "Publish DB Rules in FB!"
-            else:
-                self.status_message = err[:24]
+            self.status_message = self._format_network_error(room_id)
 
     def _attempt_join_room(self, code, audio_mgr):
         # Validate 10-char alphanumeric room code format before sending to network
@@ -376,13 +388,13 @@ class MultiplayerLobbyScreen:
         else:
             self.is_error = True
             if res == "CANNOT_JOIN_OWN_ROOM":
-                self.status_message = "Can't join your own room!"
+                self.status_message = "Cannot join own room!"
             elif res == "ROOM_FULL":
                 self.status_message = "Room is full! (2/2)"
             elif res == "JOIN_DENIED":
-                self.status_message = "Invalid or unavailable room!"
+                self.status_message = "Invalid/closed room!"
             else:
-                self.status_message = f"Failed: {res}"
+                self.status_message = self._format_network_error(res)
 
     def update(self, dt_ms):
         self.blink_timer += dt_ms
@@ -504,8 +516,12 @@ class MultiplayerLobbyScreen:
         surface.blit(code_s, (18, 29))
 
         if self.status_message:
-            color = COLOR_DARKEST if not self.is_error else (15, 56, 15)
-            surface.blit(f_tag.render(self.status_message, False, color), (14, 44))
+            if self.is_error:
+                pygame.draw.rect(surface, COLOR_DARKEST, (12, 43, 136, 9))
+                err_s = f_tag.render(self.status_message[:22], False, COLOR_LIGHTEST)
+                surface.blit(err_s, ((160 - err_s.get_width()) // 2, 44))
+            else:
+                surface.blit(f_tag.render(self.status_message[:22], False, COLOR_DARKEST), (14, 44))
 
         # Alphanumeric touch keypad (0-9, A-Z, DEL, OK)
         for k, rect in self.keypad_rects.items():

@@ -271,6 +271,8 @@ class TouchController:
             sys_y = ctl_top + int(ctl_h * 0.12)
             sel_x = int(self.screen_w * 0.50 - sw - gap * 2)
             start_x = int(self.screen_w * 0.50 + gap * 2)
+            sel_y = sys_y
+            start_y = sys_y
 
         else:
             # ================= LANDSCAPE MOBILE / DESKTOP LAYOUT =================
@@ -292,11 +294,12 @@ class TouchController:
             a_pos = (self.screen_w - margin_x - cell, self.screen_h - margin_y - int(cell * 2.2))
             b_pos = (self.screen_w - margin_x - int(cell * 2.2), self.screen_h - margin_y - cell)
 
-            # Select & Start buttons near center bottom
+            # Select & Start in upper side gutters so they never overlap the centered 160x144 screen
             sw = int(32 * scale)
-            sys_y = self.screen_h - margin_y - int(cell * 0.8)
-            sel_x = int(self.screen_w * 0.50 - sw - gap * 3)
-            start_x = int(self.screen_w * 0.50 + gap * 3)
+            sel_x = margin_x
+            sel_y = margin_y
+            start_x = self.screen_w - margin_x - sw
+            start_y = margin_y
 
         # Build button objects
         self.buttons["up"] = GBTouchButton("dpad", "up", "up", up_pos, scale, padding, self.opacity)
@@ -307,8 +310,8 @@ class TouchController:
         self.buttons["a"] = GBTouchButton("action", "a", "a", a_pos, scale, padding, self.opacity)
         self.buttons["b"] = GBTouchButton("action", "b", "b", b_pos, scale, padding, self.opacity)
 
-        self.buttons["select"] = GBTouchButton("system", "select", "select", (sel_x, sys_y), scale, padding, self.opacity)
-        self.buttons["start"] = GBTouchButton("system", "start", "start", (start_x, sys_y), scale, padding, self.opacity)
+        self.buttons["select"] = GBTouchButton("system", "select", "select", (sel_x, sel_y), scale, padding, self.opacity)
+        self.buttons["start"] = GBTouchButton("system", "start", "start", (start_x, start_y), scale, padding, self.opacity)
 
         # Backwards compatibility aliases for inv/menu
         self.buttons["inv"] = self.buttons["select"]
