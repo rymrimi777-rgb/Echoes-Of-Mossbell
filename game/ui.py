@@ -77,6 +77,21 @@ class TitleScreen:
             self.choice = self.options[self.index]
             self.done = True
 
+    def handle_pointer_down(self, native_x, native_y, audio_mgr=None):
+        """Handles direct mouse click or touchscreen tap on Title Screen options."""
+        start_y = 69
+        spacing = 13 if len(self.options) > 3 else 14
+        for i, opt in enumerate(self.options):
+            rect = pygame.Rect(20, start_y + i * spacing - 2, 120, 12)
+            if rect.collidepoint(native_x, native_y):
+                self.index = i
+                self.choice = opt
+                self.done = True
+                if audio_mgr:
+                    audio_mgr.play_sfx("menu_select", "ui")
+                return True
+        return False
+
     def update(self, dt_ms):
         self.blink_timer += dt_ms
         if self.blink_timer > 400:

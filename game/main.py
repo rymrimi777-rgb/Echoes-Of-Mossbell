@@ -105,6 +105,7 @@ class Game:
         self.char_select_origin = "new_game"
         self.view_scale = 1.0
         self.view_offset = (0, 0)
+        self._update_viewport_metrics()
 
         # Multiplayer & Network Systems
         self.firebase_auth = FirebaseAuth()
@@ -183,6 +184,25 @@ class Game:
             self.room_mgr.leave_room()
             self.remote_player = None
             self.is_multiplayer = False
+
+    def _update_viewport_metrics(self):
+        scr_w, scr_h = self.screen.get_size()
+        scale = min(scr_w / GAME_W, scr_h / GAME_H)
+        view_w = int(GAME_W * scale)
+        view_h = int(GAME_H * scale)
+        view_x = (scr_w - view_w) // 2
+        view_y = 0 if scr_h > (scr_w * 1.1) else (scr_h - view_h) // 2
+        self.view_scale = scale
+        self.view_offset = (view_x, view_y)
+
+    def _get_pointer_pos(self, event):
+        """Returns screen (wx, wy) for desktop mouse left click or mobile FINGERDOWN."""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and not getattr(event, "touch", False):
+            return event.pos
+        if event.type == pygame.FINGERDOWN:
+            scr_w, scr_h = self.screen.get_size()
+            return int(event.x * scr_w), int(event.y * scr_h)
+        return None
 
     def window_to_native(self, wx, wy):
         """Converts window/screen pixel coordinates to native 160x144 Game Boy space."""
@@ -552,6 +572,31 @@ class Game:
             elif event.type == pygame.VIDEORESIZE:
                 self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
                 self.touch_ctrl.update_layout(event.w, event.h)
+                self._update_viewport_metrics()
+
+            # Route pointer clicks/taps inside native viewport directly to interactive menus first
+            menu_states = (STATE_TITLE, STATE_CHAR_SELECT, STATE_GAME_MODE, STATE_MP_LOBBY)
+            ptr_pos = self._get_pointer_pos(event)
+            handled_by_menu = False
+            if ptr_pos and self.state in menu_states:
+                wx, wy = ptr_pos
+                vx, vy = self.view_offset
+                vw, vh = int(GAME_W * self.view_scale), int(GAME_H * self.view_scale)
+                if vx <= wx < vx + vw and vy <= wy < vy + vh:
+                    nx, ny = self.window_to_native(wx, wy)
+                    if self.state == STATE_TITLE:
+                        handled_by_menu = self.title_screen.handle_pointer_down(nx, ny, audio_mgr=self.audio)
+                    elif self.state == STATE_CHAR_SELECT:
+                        handled_by_menu = self.char_select.handle_pointer_down(nx, ny, audio_mgr=self.audio)
+                    elif self.state == STATE_GAME_MODE:
+                        handled_by_menu = self.game_mode_screen.handle_pointer_down(nx, ny, audio_mgr=self.audio)
+                    elif self.state == STATE_MP_LOBBY:
+                        handled_by_menu = self.mp_lobby_screen.handle_pointer_down(nx, ny, audio_mgr=self.audio)
+                    # On desktop mouse clicks inside menus, consume click so virtual touch buttons don't pop up
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        continue
+                    if handled_by_menu:
+                        continue
 
             # Touch Controller
             self.touch_ctrl.handle_event(event)
@@ -559,23 +604,11 @@ class Game:
             if self.state == STATE_TITLE:
                 self.title_screen.handle_event(event)
             elif self.state == STATE_CHAR_SELECT:
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    nx, ny = self.window_to_native(*event.pos)
-                    self.char_select.handle_pointer_down(nx, ny, audio_mgr=self.audio)
-                else:
-                    self.char_select.handle_event(event, audio_mgr=self.audio)
+                self.char_select.handle_event(event, audio_mgr=self.audio)
             elif self.state == STATE_GAME_MODE:
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    nx, ny = self.window_to_native(*event.pos)
-                    self.game_mode_screen.handle_pointer_down(nx, ny, audio_mgr=self.audio)
-                else:
-                    self.game_mode_screen.handle_event(event, audio_mgr=self.audio)
+                self.game_mode_screen.handle_event(event, audio_mgr=self.audio)
             elif self.state == STATE_MP_LOBBY:
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    nx, ny = self.window_to_native(*event.pos)
-                    self.mp_lobby_screen.handle_pointer_down(nx, ny, audio_mgr=self.audio)
-                else:
-                    self.mp_lobby_screen.handle_event(event, audio_mgr=self.audio)
+                self.mp_lobby_screen.handle_event(event, audio_mgr=self.audio)
             elif self.state == STATE_PLAY:
                 if event.type == pygame.KEYDOWN:
                     if event.key in KEYS_PAUSE:

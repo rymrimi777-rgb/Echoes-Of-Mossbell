@@ -280,21 +280,55 @@ def run_multiplayer_tests():
     lobby.draw(pygame.Surface((160, 144)))
     print("Lobby 10-char keyboard & 38-key touch keypad cleanly verified inside 160x144.")
 
-    # 9. Game Engine SOLO Isolation
-    print("\n9. Testing Game Engine SOLO Mode Independence...")
+    # Check error banner rendering in MODE_MAIN when API key missing
+    no_key_auth = type("NoKeyAuth", (), {
+        "uid": None,
+        "get_valid_token": lambda self: None,
+        "sign_in_anonymously": lambda self: (False, "API_KEY_REQUIRED"),
+    })()
+    no_key_client = FirebaseClient(no_key_auth)
+    no_key_rm = RoomManager(no_key_client)
+    lobby_err = MultiplayerLobbyScreen(ui, no_key_rm)
+    assert lobby_err.handle_pointer_down(60, 72) is True
+    assert lobby_err.is_error is True and "firebase_config.json" in lobby_err.status_message
+    lobby_err.draw(pygame.Surface((160, 144)))
+
+    # 9. Game Engine SOLO Isolation & Real Pointer/Touch Navigation
+    print("\n9. Testing Game Engine SOLO Mode Independence & Pointer/Touch Navigation...")
     game = Game()
-    game.title_screen.choice = "NEW GAME"
-    game.title_screen.done = True
+    vx, vy = game.view_offset
+    sc = game.view_scale
+    ng_idx = game.title_screen.options.index("NEW GAME")
+    ng_spacing = 13 if len(game.title_screen.options) > 3 else 14
+    ng_ny = 69 + ng_idx * ng_spacing + 3
+    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(int(vx + 80 * sc), int(vy + ng_ny * sc))))
+    game._handle_events()
     game._update(16)
-    assert game.state == STATE_CHAR_SELECT
-    game.char_select.done = True
+    assert game.state == STATE_CHAR_SELECT, f"Click on NEW GAME failed! state={game.state}"
+
+    scr_w, scr_h = game.screen.get_size()
+    cx_norm = (vx + 36 * sc) / scr_w
+    cy_norm = (vy + 134 * sc) / scr_h
+    pygame.event.post(pygame.event.Event(pygame.FINGERDOWN, finger_id=1, x=cx_norm, y=cy_norm))
+    game._handle_events()
+    game._update(16)
+    assert game.state == STATE_GAME_MODE, f"FINGERDOWN on Confirm failed! state={game.state}"
+
+    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(int(vx + 80 * sc), int(vy + 88 * sc))))
+    game._handle_events()
+    game._update(16)
+    assert game.state == "mp_lobby", f"Click on PLAY WITH FRIENDS failed! state={game.state}"
+
+    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(int(vx + 80 * sc), int(vy + 106 * sc))))
+    game._handle_events()
     game._update(16)
     assert game.state == STATE_GAME_MODE
+
     game.game_mode_screen.choice = "SOLO"
     game.game_mode_screen.done = True
     game._update(16)
     assert game.state == STATE_PLAY and game.is_multiplayer is False
-    print("SOLO mode confirmed offline play without network dependency!")
+    print("Title click, Character FINGERDOWN tap, Lobby click, and SOLO mode verified!")
 
     # 10. Validation & Self-Join Prevention (against fresh waiting room so host rule check is exercised)
     print("\n10. Testing Room ID, Character ID, Map ID, Coords & Self-Join...")

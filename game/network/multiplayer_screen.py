@@ -347,8 +347,12 @@ class MultiplayerLobbyScreen:
             if audio_mgr:
                 audio_mgr.play_sfx("menu_select", "ui")
         else:
-            self.status_message = f"Error: {room_id}"
             self.is_error = True
+            err = str(room_id)
+            if "API_KEY_REQUIRED" in err:
+                self.status_message = "Need firebase_config.json!"
+            else:
+                self.status_message = err[:24]
 
     def _attempt_join_room(self, code, audio_mgr):
         # Validate 10-char alphanumeric room code format before sending to network
@@ -420,6 +424,16 @@ class MultiplayerLobbyScreen:
 
         surface.blit(font_subheading().render(char_info["name"].upper(), False, COLOR_DARKEST), (46, 22))
         surface.blit(font_body_small().render("Online 2-Player Co-op", False, COLOR_DARK), (46, 34))
+
+        if self.status_message:
+            f_tag = font_tag()
+            if self.is_error:
+                pygame.draw.rect(surface, COLOR_DARKEST, (6, 54, 148, 10))
+                err_s = f_tag.render(self.status_message[:24], False, COLOR_LIGHTEST)
+                surface.blit(err_s, ((160 - err_s.get_width()) // 2, 56))
+            else:
+                st_s = f_tag.render(self.status_message[:24], False, COLOR_DARK)
+                surface.blit(st_s, ((160 - st_s.get_width()) // 2, 56))
 
         start_y = 66
         spacing = 18
