@@ -324,6 +324,13 @@ class MultiplayerLobbyScreen:
             self.is_error = True
 
     def _attempt_join_room(self, code, audio_mgr):
+        # Validate room code format before sending to network
+        code = code.strip()
+        if not code.isdigit() or len(code) != 5:
+            self.is_error = True
+            self.status_message = "Enter 5-digit code!"
+            return
+
         char_name = get_character(self.character_id)["name"]
         ok, res = self.room_mgr.join_room(code, self.character_id, player_name=char_name)
         if ok:
@@ -333,7 +340,9 @@ class MultiplayerLobbyScreen:
             self.done = True
         else:
             self.is_error = True
-            if res == "ROOM_FULL":
+            if res == "CANNOT_JOIN_OWN_ROOM":
+                self.status_message = "Can't join your own room!"
+            elif res == "ROOM_FULL":
                 self.status_message = "Room is full! (2/2)"
             elif res == "ROOM_NOT_FOUND":
                 self.status_message = "Room not found!"

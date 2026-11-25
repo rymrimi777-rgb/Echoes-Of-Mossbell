@@ -37,7 +37,7 @@ def load_api_key():
         try:
             with open(cfg_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                key = data.get("api_key") or data.get("apiKey")
+                key = data.get("api_key") or data.get("apiKey") or data.get("web_api_key")
                 if key:
                     return key.strip()
         except Exception:

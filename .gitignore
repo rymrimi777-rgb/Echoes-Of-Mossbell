@@ -11,3 +11,8 @@ bin/
 _web_staging/
 temp_pages/
 
+# Firebase credentials and authentication tokens — NEVER commit these
+saves/auth_cache.json
+saves/firebase_config.json
+firebase_config.json
+

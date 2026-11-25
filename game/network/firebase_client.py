@@ -29,8 +29,9 @@ class FirebaseClient:
         url = f"{self.base_url}/{clean_path}.json"
         query = {}
         token = self.auth.get_valid_token()
-        if token:
-            query["auth"] = token
+        if not token:
+            raise ConnectionError("AUTHENTICATION_REQUIRED: No valid Firebase token available.")
+        query["auth"] = token
         if params:
             query.update(params)
         if query:
@@ -38,7 +39,10 @@ class FirebaseClient:
         return url
 
     def _send_request(self, method, path, data=None, headers=None, if_match=None, timeout=6, retry_on_401=True):
-        url = self._build_url(path)
+        try:
+            url = self._build_url(path)
+        except ConnectionError as ce:
+            return False, str(ce), None
         req_headers = {"Content-Type": "application/json"}
         if headers:
             req_headers.update(headers)

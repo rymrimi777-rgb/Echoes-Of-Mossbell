@@ -10,6 +10,7 @@ import time
 import ssl
 import urllib.request
 import urllib.error
+import urllib.parse
 from game.network.firebase_config import load_api_key, save_api_key
 from game.settings import SAVE_DIR
 

@@ -2,6 +2,12 @@
 Background Network Worker Thread.
 Handles asynchronous bidirectional synchronization with Firebase Realtime Database.
 Prevents HTTP network calls from stalling or freezing the 60 FPS Pygame main thread.
+
+Thread safety:
+- Uses a threading.Lock to protect the latest-state slot from concurrent access.
+- Outgoing state is stored in a single-slot variable (not a queue) to guarantee
+  only the latest position is sent, eliminating stale-frame races.
+- The stop() method uses an Event for clean, immediate shutdown.
 """
 import time
 import queue
@@ -30,43 +36,54 @@ class NetworkWorker:
         self.local_slot = local_slot
         self.remote_slot = remote_slot
 
-        self.outgoing_queue = queue.Queue(maxsize=10)
+        # Thread-safe single-slot for the latest outgoing state (replaces Queue)
+        self._outgoing_lock = threading.Lock()
+        self._outgoing_state = None
+
         self.incoming_queue = queue.Queue(maxsize=10)
         self.events_queue = queue.Queue(maxsize=20)
 
-        self.running = False
+        self._stop_event = threading.Event()
+        self._stop_event.set()  # Initially stopped; start() clears this
         self.thread = None
 
         self._last_send_time = 0.0
         self._last_poll_time = 0.0
         self._last_heartbeat_time = 0.0
         self._last_remote_seen = time.time()
-        self._last_local_state = None
+        self._last_sent_state = None
+
+    @property
+    def running(self):
+        return not self._stop_event.is_set()
 
     def start(self):
         """Starts the background networking thread."""
-        if self.running:
+        if self.thread and self.thread.is_alive():
             return
-        self.running = True
+        self._stop_event.clear()
         self._last_remote_seen = time.time()
         self.thread = threading.Thread(target=self._run, daemon=True, name="NetworkWorker")
         self.thread.start()
 
     def stop(self):
         """Stops the worker thread cleanly."""
-        self.running = False
+        self._stop_event.set()
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=1.5)
+            self.thread.join(timeout=2.0)
+        self.thread = None
 
     def queue_local_update(self, state_dict):
-        """Called by Pygame main thread to stage the latest local position."""
-        try:
-            # Keep only the freshest update
-            while not self.outgoing_queue.empty():
-                self.outgoing_queue.get_nowait()
-            self.outgoing_queue.put_nowait(state_dict)
-        except Exception:
-            pass
+        """Called by Pygame main thread to stage the latest local position (thread-safe)."""
+        with self._outgoing_lock:
+            self._outgoing_state = state_dict
+
+    def _consume_outgoing(self):
+        """Called by worker thread to atomically grab and clear the latest state."""
+        with self._outgoing_lock:
+            state = self._outgoing_state
+            self._outgoing_state = None
+            return state
 
     def get_remote_updates(self):
         """Called by Pygame main thread to fetch all fresh remote updates."""
@@ -74,7 +91,7 @@ class NetworkWorker:
         while not self.incoming_queue.empty():
             try:
                 updates.append(self.incoming_queue.get_nowait())
-            except Exception:
+            except queue.Empty:
                 break
         return updates
 
@@ -84,7 +101,7 @@ class NetworkWorker:
         while not self.events_queue.empty():
             try:
                 events.append(self.events_queue.get_nowait())
-            except Exception:
+            except queue.Empty:
                 break
         return events
 
@@ -97,48 +114,56 @@ class NetworkWorker:
         local_path = f"rooms/{self.room_id}/players/{self.local_slot}"
         remote_path = f"rooms/{self.room_id}/players/{self.remote_slot}"
 
-        while self.running:
+        while not self._stop_event.is_set():
             now = time.time()
 
             # 1. Send outgoing updates (Local -> Firebase)
             send_due = (now - self._last_send_time) >= send_interval
             heartbeat_due = (now - self._last_heartbeat_time) >= heartbeat_interval
 
-            pending_update = None
-            try:
-                pending_update = self.outgoing_queue.get_nowait()
-                self._last_local_state = pending_update
-            except queue.Empty:
-                pass
+            pending_update = self._consume_outgoing()
+            if pending_update:
+                self._last_sent_state = pending_update
 
             if pending_update and send_due:
                 payload = dict(pending_update)
                 payload["last_seen"] = now
                 payload["connected"] = True
-                ok, _, _ = self.client.patch(local_path, payload, timeout=3)
+                try:
+                    ok, _, _ = self.client.patch(local_path, payload, timeout=3)
+                except Exception:
+                    pass
                 self._last_send_time = now
                 self._last_heartbeat_time = now
 
-            elif heartbeat_due and self._last_local_state:
+            elif heartbeat_due and self._last_sent_state:
                 # Idle heartbeat
                 payload = {
                     "last_seen": now,
                     "connected": True
                 }
-                self.client.patch(local_path, payload, timeout=3)
+                try:
+                    self.client.patch(local_path, payload, timeout=3)
+                except Exception:
+                    pass
                 self._last_heartbeat_time = now
 
             # 2. Poll remote updates (Firebase -> Remote Player)
             if (now - self._last_poll_time) >= poll_interval:
                 self._last_poll_time = now
-                ok, data, _ = self.client.get(remote_path, timeout=3)
+                try:
+                    ok, data, _ = self.client.get(remote_path, timeout=3)
+                except Exception:
+                    ok, data = False, None
+
                 if ok and data:
                     self._last_remote_seen = now
                     try:
+                        # Drain stale entries before inserting fresh data
                         while not self.incoming_queue.empty():
                             self.incoming_queue.get_nowait()
                         self.incoming_queue.put_nowait(data)
-                    except Exception:
+                    except queue.Full:
                         pass
 
                     if not data.get("connected", True):
@@ -150,10 +175,11 @@ class NetworkWorker:
                         self._emit_event(self.EVENT_DISCONNECTED, "Connection to partner timed out")
                         self._last_remote_seen = now  # Reset to prevent spamming
 
-            time.sleep(0.015)
+            # Use Event.wait() for interruptible sleep (stops immediately when stop() is called)
+            self._stop_event.wait(timeout=0.015)
 
     def _emit_event(self, event_type, data=None):
         try:
             self.events_queue.put_nowait((event_type, data))
-        except Exception:
+        except queue.Full:
             pass
