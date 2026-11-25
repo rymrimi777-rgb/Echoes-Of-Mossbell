@@ -60,14 +60,25 @@ class FirebaseClient:
                 resp_bytes = resp.read()
                 resp_text = resp_bytes.decode("utf-8") if resp_bytes else ""
                 parsed = json.loads(resp_text) if resp_text else None
-                etag = resp.headers.get("ETag")
+                etag = resp.headers.get("ETag") or resp.headers.get("Etag")
                 return True, parsed, etag
         except urllib.error.HTTPError as e:
             # Handle token expiration (HTTP 401)
             if e.code == 401 and retry_on_401:
-                token_refreshed, _ = self.auth.refresh_id_token()
-                if token_refreshed:
-                    return self._send_request(method, path, data, headers, if_match, timeout, retry_on_401=False)
+                # Drain error body first
+                try:
+                    err_raw = e.read().decode("utf-8")
+                    err_parsed = json.loads(err_raw) if err_raw else {}
+                    err_text = str(err_parsed.get("error", ""))
+                except Exception:
+                    err_text = ""
+
+                # Only auto-refresh if error looks like an expired/invalid auth token, NOT rule Permission denied
+                if "Permission denied" not in err_text:
+                    token_refreshed, _ = self.auth.refresh_id_token()
+                    if token_refreshed:
+                        return self._send_request(method, path, data, headers, if_match, timeout, retry_on_401=False)
+                return False, err_text or str(e), None
 
             # Precondition failed (ETag mismatch)
             if e.code == 412:
@@ -82,9 +93,10 @@ class FirebaseClient:
         except Exception as ex:
             return False, str(ex), None
 
-    def get(self, path, timeout=6):
-        """GET request. Returns (success: bool, data: any, etag: str)."""
-        return self._send_request("GET", path, timeout=timeout)
+    def get(self, path, timeout=6, with_etag=False):
+        """GET request. Returns (success: bool, data: any, etag: str). Set with_etag=True for X-Firebase-ETag."""
+        hdrs = {"X-Firebase-ETag": "true"} if with_etag else None
+        return self._send_request("GET", path, headers=hdrs, timeout=timeout)
 
     def put(self, path, data, if_match=None, timeout=6):
         """PUT request (replaces data at path). Supports conditional If-Match."""

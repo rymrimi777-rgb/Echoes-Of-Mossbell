@@ -530,6 +530,7 @@ class Game:
     def _handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                self._stop_multiplayer()
                 self.running = False
                 return
 

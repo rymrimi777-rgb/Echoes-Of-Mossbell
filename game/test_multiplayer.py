@@ -44,45 +44,49 @@ from game.main import Game, STATE_TITLE, STATE_CHAR_SELECT, STATE_GAME_MODE, STA
 
 
 class MockFirebaseBackend:
-    """In-memory mock of Firebase Realtime Database for deterministic multi-client tests."""
+    """In-memory mock of Firebase Realtime Database with realistic ETag / If-Match enforcement."""
 
     def __init__(self):
         self.data = {}
+        self._ver = 0
 
-    def get(self, path):
+    def _get_ref(self, path):
         path = path.strip("/")
-        parts = path.split("/")
+        parts = [p for p in path.split("/") if p]
         curr = self.data
         for p in parts:
             if isinstance(curr, dict) and p in curr:
                 curr = curr[p]
             else:
-                return True, None, "etag_null"
-        return True, curr, "etag_valid"
+                return None, "null_etag"
+        return curr, f"etag_v{self._ver}"
+
+    def get(self, path, with_etag=False):
+        val, etag = self._get_ref(path)
+        return True, val, (etag if with_etag else None)
 
     def put(self, path, val, if_match=None):
-        path = path.strip("/")
-        parts = path.split("/")
+        existing, current_etag = self._get_ref(path)
 
-        # Simulate ETag-based conditional write (If-Match)
+        # Realistic ETag enforcement (HTTP 412 PRECONDITION_FAILED)
         if if_match is not None:
-            # Check if the resource exists (simulate ETag mismatch)
-            _, existing, existing_etag = self.get(path)
-            if existing is not None and if_match == "etag_null":
-                # Resource exists but we expected it to be empty -> precondition failed
+            if if_match != current_etag:
                 return False, "PRECONDITION_FAILED", None
 
+        path = path.strip("/")
+        parts = [p for p in path.split("/") if p]
         curr = self.data
         for p in parts[:-1]:
             if p not in curr or not isinstance(curr[p], dict):
                 curr[p] = {}
             curr = curr[p]
         curr[parts[-1]] = val
-        return True, val, "etag_new"
+        self._ver += 1
+        return True, val, f"etag_v{self._ver}"
 
     def patch(self, path, val):
         path = path.strip("/")
-        parts = path.split("/")
+        parts = [p for p in path.split("/") if p]
         curr = self.data
         for p in parts:
             if p not in curr or not isinstance(curr[p], dict):
@@ -90,11 +94,12 @@ class MockFirebaseBackend:
             curr = curr[p]
         if isinstance(val, dict):
             curr.update(val)
-        return True, curr, "etag_patched"
+        self._ver += 1
+        return True, curr, f"etag_v{self._ver}"
 
     def delete(self, path):
         path = path.strip("/")
-        parts = path.split("/")
+        parts = [p for p in path.split("/") if p]
         curr = self.data
         for p in parts[:-1]:
             if p in curr:
@@ -103,6 +108,7 @@ class MockFirebaseBackend:
                 return True, None, None
         if parts[-1] in curr:
             del curr[parts[-1]]
+        self._ver += 1
         return True, None, None
 
 
@@ -118,8 +124,8 @@ class MockFirebaseClient:
             "refresh_id_token": lambda self: (True, "mock_refreshed_token")
         })()
 
-    def get(self, path, timeout=5):
-        return self.backend.get(path)
+    def get(self, path, timeout=5, with_etag=False):
+        return self.backend.get(path, with_etag=with_etag)
 
     def put(self, path, data, if_match=None, timeout=5):
         return self.backend.put(path, data, if_match=if_match)
@@ -338,21 +344,25 @@ def run_multiplayer_tests():
     assert ok_inv3 is False
     print("Invalid room ID formats ('abc', '1234', '') all correctly rejected!")
 
-    # 11. Clean Multiplayer Leave & Teardown
+    # 11. Clean Multiplayer Leave & Teardown (Verify P2 slot NOT wiped when P1 leaves)
     print("\n11. Testing Clean Disconnect & Teardown...")
+    saved_rid = rid
     room_mgr_p1.leave_room()
     assert room_mgr_p1.current_room_id is None
     assert room_mgr_p1.local_uid is None
+    assert backend.data["rooms"][saved_rid]["status"] == "closed", "Host leaving should close room"
+    assert backend.data["rooms"][saved_rid]["players"]["p2"]["uid"] == "uid_player_2", "Host leaving must NOT delete P2!"
+    assert backend.data["rooms"][saved_rid]["players"]["p1"]["connected"] is False
     room_mgr_p2.leave_room()
     assert room_mgr_p2.current_room_id is None
     assert room_mgr_p2.local_uid is None
-    print("Room teardown, UID cleanup, and clean disconnect verified!")
+    assert backend.data["rooms"][saved_rid]["players"]["p2"]["connected"] is False
+    print("Room teardown, UID cleanup, and non-destructive disconnect verified!")
 
     # 12. NetworkWorker Thread Safety
     print("\n12. Testing NetworkWorker Thread Safety...")
     backend3 = MockFirebaseBackend()
     client_nw = MockFirebaseClient(backend3, uid="uid_nw_test")
-    # Create room data for the worker
     backend3.data["rooms"] = {"99999": {"players": {"p1": {"connected": True}, "p2": {"connected": True}}}}
     nw = NetworkWorker(client_nw, room_id="99999", local_slot="p1", remote_slot="p2")
     assert nw.running is False, "Worker should not be running before start()"
@@ -366,8 +376,40 @@ def run_multiplayer_tests():
     assert state2 is None, "Should be empty after consume"
     print("NetworkWorker thread-safe single-slot outgoing state verified!")
 
+    # 13. Unauthenticated Access Block & Conditional ETag 412 Handling
+    print("\n13. Testing Unauthenticated Rejection & ETag Precondition Failure...")
+    no_token_auth = type("NoTokenAuth", (), {"get_valid_token": lambda self: None})()
+    real_client_no_auth = FirebaseClient(no_token_auth)
+    ok_unauth, err_unauth, _ = real_client_no_auth.get("rooms/12345")
+    assert ok_unauth is False and "AUTHENTICATION_REQUIRED" in err_unauth, f"Expected AUTHENTICATION_REQUIRED, got {err_unauth}"
+    ok_put_unauth, err_put_unauth, _ = real_client_no_auth.put("rooms/12345", {"test": 1})
+    assert ok_put_unauth is False and "AUTHENTICATION_REQUIRED" in err_put_unauth
+
+    # Test 412 precondition failed when null_etag put collides
+    backend_race = MockFirebaseBackend()
+    backend_race.put("rooms/55555", {"status": "waiting"}, if_match="null_etag")
+    ok_race, err_race, _ = backend_race.put("rooms/55555", {"status": "waiting"}, if_match="null_etag")
+    assert ok_race is False and err_race == "PRECONDITION_FAILED"
+
+    # Test p2 conflict (stale p2 still rejected even if connected=False!)
+    c_host = MockFirebaseClient(backend_race, uid="uid_host")
+    rm_host = RoomManager(c_host)
+    ok_r2, rid2 = rm_host.create_room("actor1_character_01", "Host")
+    assert ok_r2
+    c_p2a = MockFirebaseClient(backend_race, uid="uid_p2a")
+    rm_p2a = RoomManager(c_p2a)
+    ok_j2a, _ = rm_p2a.join_room(rid2, "actor1_character_02", "P2A")
+    assert ok_j2a
+    rm_p2a.leave_room()  # p2a disconnects (connected=False)
+    # Player 3 MUST still be rejected!
+    c_p3 = MockFirebaseClient(backend_race, uid="uid_p3")
+    rm_p3 = RoomManager(c_p3)
+    ok_p3_late, err_p3_late = rm_p3.join_room(rid2, "actor1_character_03", "P3")
+    assert ok_p3_late is False and err_p3_late == "ROOM_FULL", f"Expected ROOM_FULL even after P2 disconnect, got {err_p3_late}"
+    print("Unauthenticated block, HTTP 412 conflict check, and disconnected-P2 hijack block verified!")
+
     print("\n" + "=" * 65)
-    print("=== ALL 12 SECURITY TESTS PASSED WITH 100% SUCCESS! ===")
+    print("=== ALL 13 SECURITY TESTS PASSED WITH 100% SUCCESS! ===")
     print("=" * 65)
 
 

@@ -13,6 +13,7 @@ import time
 import queue
 import threading
 from game.network.firebase_client import FirebaseClient
+from game.network.room_manager import _sanitize_character_id, _clamp_coord, _sanitize_map_id
 
 
 class NetworkWorker:
@@ -52,6 +53,7 @@ class NetworkWorker:
         self._last_heartbeat_time = 0.0
         self._last_remote_seen = time.time()
         self._last_sent_state = None
+        self._remote_left_emitted = False
 
     @property
     def running(self):
@@ -63,14 +65,15 @@ class NetworkWorker:
             return
         self._stop_event.clear()
         self._last_remote_seen = time.time()
+        self._remote_left_emitted = False
         self.thread = threading.Thread(target=self._run, daemon=True, name="NetworkWorker")
         self.thread.start()
 
     def stop(self):
-        """Stops the worker thread cleanly."""
+        """Stops the worker thread cleanly (waits longer than HTTP timeout)."""
         self._stop_event.set()
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=2.0)
+            self.thread.join(timeout=3.5)
         self.thread = None
 
     def queue_local_update(self, state_dict):
@@ -127,6 +130,16 @@ class NetworkWorker:
 
             if pending_update and send_due:
                 payload = dict(pending_update)
+                if "character_id" in payload:
+                    payload["character_id"] = _sanitize_character_id(payload["character_id"])
+                if "x" in payload:
+                    payload["x"] = _clamp_coord(payload["x"])
+                if "y" in payload:
+                    payload["y"] = _clamp_coord(payload["y"])
+                if "map" in payload:
+                    payload["map"] = _sanitize_map_id(payload["map"])
+                if "direction" in payload and payload["direction"] not in ("up", "down", "left", "right"):
+                    payload["direction"] = "down"
                 payload["last_seen"] = now
                 payload["connected"] = True
                 try:
@@ -166,7 +179,16 @@ class NetworkWorker:
                     except queue.Full:
                         pass
 
-                    if not data.get("connected", True):
+                    if not data.get("connected", True) and not self._remote_left_emitted:
+                        self._remote_left_emitted = True
+                        self._emit_event(self.EVENT_PLAYER_LEFT, "Remote player disconnected")
+                    elif data.get("connected", True):
+                        self._remote_left_emitted = False
+
+                elif ok and data is None:
+                    # Remote slot removed cleanly
+                    if not self._remote_left_emitted:
+                        self._remote_left_emitted = True
                         self._emit_event(self.EVENT_PLAYER_LEFT, "Remote player disconnected")
 
                 else:

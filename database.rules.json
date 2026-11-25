@@ -1,0 +1,115 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null && (data.child('host_uid').val() === auth.uid || data.child('players/p2/uid').val() === auth.uid || !data.exists() || (data.child('status').val() === 'waiting' && !data.child('players/p2').exists()))",
+
+        ".write": "auth != null && !data.exists() && newData.exists()",
+
+        ".validate": "$roomId.matches(/^[0-9]{5}$/) && newData.hasChildren(['created_at', 'host_uid', 'status', 'max_players']) && (data.exists() || (newData.child('players/p1').exists() && !newData.child('players/p2').exists() && newData.child('status').val() === 'waiting'))",
+
+        "created_at": {
+          ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val())"
+        },
+        "host_uid": {
+          ".validate": "newData.isString() && newData.val() === auth.uid && (!data.exists() || newData.val() === data.val())"
+        },
+        "max_players": {
+          ".validate": "newData.isNumber() && newData.val() === 2 && (!data.exists() || newData.val() === data.val())"
+        },
+        "status": {
+          ".write": "auth != null && data.exists() && newData.exists() && ((data.parent().child('host_uid').val() === auth.uid && (newData.val() === 'closed' || (data.val() === 'waiting' && newData.val() === 'playing' && data.parent().child('players/p2').exists()))) || (data.parent().child('players/p2').exists() && data.parent().child('players/p2/uid').val() === auth.uid && data.val() === 'waiting' && newData.val() === 'playing'))",
+          ".validate": "newData.isString() && (newData.val() === 'waiting' || newData.val() === 'playing' || newData.val() === 'closed')"
+        },
+
+        "players": {
+          "p1": {
+            ".write": "auth != null && data.exists() && data.child('uid').val() === auth.uid && data.parent().parent().child('host_uid').val() === auth.uid && (newData.exists() || data.parent().parent().child('status').val() === 'closed')",
+            ".validate": "newData.hasChildren(['uid', 'character_id', 'x', 'y', 'connected'])",
+
+            "uid": {
+              ".validate": "newData.isString() && newData.val() === auth.uid && (!data.exists() || newData.val() === data.val())"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 20"
+            },
+            "character_id": {
+              ".validate": "newData.isString() && newData.val().matches(/^actor1_character_0[1-8]$/)"
+            },
+            "x": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4096"
+            },
+            "y": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4096"
+            },
+            "direction": {
+              ".validate": "newData.isString() && (newData.val() === 'up' || newData.val() === 'down' || newData.val() === 'left' || newData.val() === 'right')"
+            },
+            "moving": {
+              ".validate": "newData.isBoolean()"
+            },
+            "last_seen": {
+              ".validate": "newData.isNumber()"
+            },
+            "connected": {
+              ".validate": "newData.isBoolean()"
+            },
+            "map": {
+              ".validate": "newData.isString() && (newData.val() === 'village' || newData.val() === 'player_house' || newData.val() === 'elder_house' || newData.val() === 'forest' || newData.val() === 'deep_forest' || newData.val() === 'ruins' || newData.val() === 'dungeon' || newData.val() === 'grotto')"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+
+          "p2": {
+            ".write": "auth != null && ((!data.exists() && newData.exists() && data.parent().parent().exists() && data.parent().parent().child('status').val() === 'waiting' && data.parent().parent().child('host_uid').val() !== auth.uid && data.parent().child('p1').exists() && data.parent().child('p1/uid').val() !== auth.uid && data.parent().child('p1/connected').val() === true) || (data.exists() && data.child('uid').val() === auth.uid && (newData.exists() || data.parent().parent().child('status').val() !== 'waiting')))",
+            ".validate": "newData.hasChildren(['uid', 'character_id', 'x', 'y', 'connected'])",
+
+            "uid": {
+              ".validate": "newData.isString() && newData.val() === auth.uid && (!data.exists() || newData.val() === data.val()) && newData.parent().parent().parent().child('host_uid').val() !== newData.val() && newData.parent().parent().child('p1/uid').val() !== newData.val()"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 20"
+            },
+            "character_id": {
+              ".validate": "newData.isString() && newData.val().matches(/^actor1_character_0[1-8]$/)"
+            },
+            "x": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4096"
+            },
+            "y": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4096"
+            },
+            "direction": {
+              ".validate": "newData.isString() && (newData.val() === 'up' || newData.val() === 'down' || newData.val() === 'left' || newData.val() === 'right')"
+            },
+            "moving": {
+              ".validate": "newData.isBoolean()"
+            },
+            "last_seen": {
+              ".validate": "newData.isNumber()"
+            },
+            "connected": {
+              ".validate": "newData.isBoolean()"
+            },
+            "map": {
+              ".validate": "newData.isString() && (newData.val() === 'village' || newData.val() === 'player_house' || newData.val() === 'elder_house' || newData.val() === 'forest' || newData.val() === 'deep_forest' || newData.val() === 'ruins' || newData.val() === 'dungeon' || newData.val() === 'grotto')"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+
+          "$otherSlot": {
+            ".validate": false
+          }
+        },
+
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}
