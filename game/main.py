@@ -53,6 +53,13 @@ class Game:
         pygame.init()
         pygame.display.set_caption("Echoes of Mossbell")
 
+        icon_path = os.path.join(ASSET_DIR, "icon", "window_icon.png")
+        if os.path.isfile(icon_path):
+            try:
+                pygame.display.set_icon(pygame.image.load(icon_path))
+            except Exception:
+                pass
+
         disp_flags = pygame.RESIZABLE
         if getattr(pygame, "IS_ANDROID", False) or IS_ANDROID:
             try:

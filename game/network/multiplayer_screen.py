@@ -11,7 +11,9 @@ from game.settings import (
 )
 from game.fonts import font_heading, font_subheading, font_tag, font_body_small, font_body
 from game.character_registry import load_portrait, get_character
-from game.network.room_manager import RoomManager
+from game.network.room_manager import (
+    RoomManager, ROOM_CODE_LENGTH, ROOM_CODE_ALPHABET, is_valid_room_id
+)
 
 
 class GameModeScreen:
@@ -151,17 +153,27 @@ class MultiplayerLobbyScreen:
         self._init_keypad()
 
     def _init_keypad(self):
-        # 3 rows x 4 cols keypad for touch screen
-        keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "DEL", "OK"]
-        start_x = 20
-        start_y = 66
-        w, h = 28, 14
-        for idx, k in enumerate(keys):
-            row = idx // 4
-            col = idx % 4
-            x = start_x + col * (w + 2)
-            y = start_y + row * (h + 2)
-            self.keypad_rects[k] = pygame.Rect(x, y, w, h)
+        # 10 cols x 4 rows alphanumeric touch keypad for 160x144 Game Boy screen
+        rows = [
+            ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+            ["K", "L", "M", "N", "O", "P", "Q", "R", "S", "T"],
+            ["U", "V", "W", "X", "Y", "Z"],
+        ]
+        start_x = 5
+        start_y = 54
+        w, h = 14, 15
+        gap_x, gap_y = 1, 2
+        for r_idx, row_keys in enumerate(rows):
+            y = start_y + r_idx * (h + gap_y)
+            for c_idx, k in enumerate(row_keys):
+                x = start_x + c_idx * (w + gap_x)
+                self.keypad_rects[k] = pygame.Rect(x, y, w, h)
+
+        # Wide DEL and OK buttons occupy columns 6..7 and 8..9 on bottom row
+        y_last = start_y + 3 * (h + gap_y)
+        self.keypad_rects["DEL"] = pygame.Rect(start_x + 6 * (w + gap_x), y_last, w * 2 + gap_x, h)
+        self.keypad_rects["OK"] = pygame.Rect(start_x + 8 * (w + gap_x), y_last, w * 2 + gap_x, h)
 
     def reset(self, character_id="actor1_character_01"):
         self.character_id = character_id
@@ -237,26 +249,41 @@ class MultiplayerLobbyScreen:
                     audio_mgr.play_sfx("menu_move", "ui")
             return
 
-        if event.key in (pygame.K_ESCAPE, pygame.K_x):
+        # Only Escape / Android Back cancels out (note: letter keys like X, A, E must type chars!)
+        back_keys = [pygame.K_ESCAPE]
+        if hasattr(pygame, "K_AC_BACK"):
+            back_keys.append(pygame.K_AC_BACK)
+        if event.key in back_keys:
             self.mode = self.MODE_MAIN
             if audio_mgr:
                 audio_mgr.play_sfx("menu_cancel", "ui")
             return
 
-        # Digits 0-9
-        if pygame.K_0 <= event.key <= pygame.K_9 or pygame.K_KP0 <= event.key <= pygame.K_KP9:
-            digit = event.unicode if event.unicode.isdigit() else str((event.key - pygame.K_0) % 10)
-            if len(self.input_code) < 5:
-                self.input_code += digit
-                if audio_mgr:
-                    audio_mgr.play_sfx("menu_move", "ui")
-
-        elif event.key in KEYS_CONFIRM or event.key in KEYS_INTERACT:
-            if len(self.input_code) >= 4:
+        # Submit on Enter / Keypad Enter
+        if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            if is_valid_room_id(self.input_code):
                 self._attempt_join_room(self.input_code, audio_mgr)
             else:
-                self.status_message = "Enter 5-digit code!"
+                self.status_message = "Enter 10-char code!"
                 self.is_error = True
+            return
+
+        # Extract uppercase alphanumeric char (via unicode first, then key fallback)
+        ch = ""
+        uni = getattr(event, "unicode", "")
+        if uni and len(uni) == 1 and uni.upper() in ROOM_CODE_ALPHABET:
+            ch = uni.upper()
+        elif pygame.K_0 <= event.key <= pygame.K_9:
+            ch = str(event.key - pygame.K_0)
+        elif pygame.K_KP0 <= event.key <= pygame.K_KP9:
+            ch = str(event.key - pygame.K_KP0)
+        elif pygame.K_a <= event.key <= pygame.K_z:
+            ch = chr(ord("A") + (event.key - pygame.K_a))
+
+        if ch and len(self.input_code) < ROOM_CODE_LENGTH:
+            self.input_code += ch
+            if audio_mgr:
+                audio_mgr.play_sfx("menu_move", "ui")
 
     def handle_pointer_down(self, native_x, native_y, audio_mgr=None):
         if self.mode == self.MODE_MAIN:
@@ -293,17 +320,17 @@ class MultiplayerLobbyScreen:
                         if self.input_code:
                             self.input_code = self.input_code[:-1]
                     elif k == "OK":
-                        if len(self.input_code) >= 4:
+                        if is_valid_room_id(self.input_code):
                             self._attempt_join_room(self.input_code, audio_mgr)
                         else:
-                            self.status_message = "Enter 5-digit code!"
+                            self.status_message = "Enter 10-char code!"
                             self.is_error = True
                     else:
-                        if len(self.input_code) < 5:
+                        if len(self.input_code) < ROOM_CODE_LENGTH:
                             self.input_code += k
                     return True
 
-            cancel_btn = pygame.Rect(40, 126, 80, 14)
+            cancel_btn = pygame.Rect(40, 125, 80, 14)
             if cancel_btn.collidepoint(native_x, native_y):
                 self.mode = self.MODE_MAIN
                 return True
@@ -324,11 +351,11 @@ class MultiplayerLobbyScreen:
             self.is_error = True
 
     def _attempt_join_room(self, code, audio_mgr):
-        # Validate room code format before sending to network
-        code = code.strip()
-        if not code.isdigit() or len(code) != 5:
+        # Validate 10-char alphanumeric room code format before sending to network
+        code = str(code).strip().upper()
+        if not is_valid_room_id(code):
             self.is_error = True
-            self.status_message = "Enter 5-digit code!"
+            self.status_message = "Enter 10-char code!"
             return
 
         char_name = get_character(self.character_id)["name"]
@@ -344,12 +371,8 @@ class MultiplayerLobbyScreen:
                 self.status_message = "Can't join your own room!"
             elif res == "ROOM_FULL":
                 self.status_message = "Room is full! (2/2)"
-            elif res == "ROOM_NOT_FOUND":
-                self.status_message = "Room not found!"
-            elif res == "ROOM_CLOSED":
-                self.status_message = "Room is closed!"
-            elif res == "HOST_DISCONNECTED":
-                self.status_message = "Host disconnected!"
+            elif res == "JOIN_DENIED":
+                self.status_message = "Invalid or unavailable room!"
             else:
                 self.status_message = f"Failed: {res}"
 
@@ -416,17 +439,17 @@ class MultiplayerLobbyScreen:
         surface.blit(prompt, ((160 - prompt.get_width()) // 2, 128))
 
     def _draw_create_wait(self, surface):
-        rid = self.room_mgr.current_room_id or "....."
+        rid = self.room_mgr.current_room_id or ".........."
 
         # Room Code Box
         box_rect = pygame.Rect(16, 22, 128, 44)
         pygame.draw.rect(surface, COLOR_LIGHT, box_rect)
         pygame.draw.rect(surface, COLOR_DARKEST, box_rect, 2)
 
-        surface.blit(font_tag().render("SHARE THIS ROOM CODE:", False, COLOR_DARK), (22, 26))
+        surface.blit(font_tag().render("SHARE THIS ROOM CODE:", False, COLOR_DARK), (18, 26))
 
-        code_surf = font_heading().render(f"  {rid}  ", False, COLOR_DARKEST)
-        surface.blit(code_surf, ((160 - code_surf.get_width()) // 2, 38))
+        code_surf = font_heading().render(rid, False, COLOR_DARKEST)
+        surface.blit(code_surf, ((160 - code_surf.get_width()) // 2, 42))
 
         # Waiting indicator
         dots = "." * (int(time.time() * 2) % 4)
@@ -447,25 +470,26 @@ class MultiplayerLobbyScreen:
         surface.blit(cancel_txt, ((160 - cancel_txt.get_width()) // 2, 124))
 
     def _draw_join_input(self, surface):
-        # Room input display
-        box = pygame.Rect(20, 20, 120, 24)
+        f_tag = font_tag()
+        surface.blit(f_tag.render("ROOM CODE (10 CHARS):", False, COLOR_DARK), (14, 16))
+
+        # Room input display (fits 10 heading chars + cursor cleanly)
+        box = pygame.Rect(12, 24, 136, 18)
         pygame.draw.rect(surface, COLOR_LIGHT, box)
         pygame.draw.rect(surface, COLOR_DARKEST, box, 1)
 
         display_text = self.input_code
-        if self.blink_state:
+        if self.blink_state and len(self.input_code) < ROOM_CODE_LENGTH:
             display_text += "_"
 
-        surface.blit(font_tag().render("ROOM CODE (5 Digits):", False, COLOR_DARK), (22, 16))
         code_s = font_heading().render(display_text, False, COLOR_DARKEST)
-        surface.blit(code_s, (26, 27))
+        surface.blit(code_s, (18, 29))
 
         if self.status_message:
             color = COLOR_DARKEST if not self.is_error else (15, 56, 15)
-            surface.blit(font_tag().render(self.status_message, False, color), (22, 48))
+            surface.blit(f_tag.render(self.status_message, False, color), (14, 44))
 
-        # Virtual keypad for touch / visual reference
-        f_tag = font_tag()
+        # Alphanumeric touch keypad (0-9, A-Z, DEL, OK)
         for k, rect in self.keypad_rects.items():
             is_ok = (k == "OK")
             is_del = (k == "DEL")
@@ -475,10 +499,10 @@ class MultiplayerLobbyScreen:
             pygame.draw.rect(surface, bg, rect)
             pygame.draw.rect(surface, COLOR_DARKEST, rect, 1)
             t = f_tag.render(k, False, fg)
-            surface.blit(t, (rect.x + (rect.w - t.get_width()) // 2, rect.y + 2))
+            surface.blit(t, (rect.x + (rect.w - t.get_width()) // 2, rect.y + (rect.h - t.get_height()) // 2))
 
         # Cancel button
-        cancel_rect = pygame.Rect(40, 126, 80, 14)
+        cancel_rect = pygame.Rect(40, 125, 80, 14)
         pygame.draw.rect(surface, COLOR_DARK, cancel_rect)
         c_txt = f_tag.render("B: BACK", False, COLOR_LIGHTEST)
         surface.blit(c_txt, ((160 - c_txt.get_width()) // 2, 128))

@@ -37,8 +37,12 @@ orientation = all
 # (bool) Indicate if the application should be fullscreen
 fullscreen = 1
 
-# (str) Icon of the application
+# (str) Icon of the application (legacy fallback for Android < API 26)
 icon.filename = assets/android/icon.png
+
+# (str) Adaptive icon of the application (Android 8.0+ / API 26+)
+icon.adaptive_foreground.filename = assets/android/icon_foreground.png
+icon.adaptive_background.filename = assets/android/icon_background.png
 
 # (str) Presplash of the application
 presplash.filename = assets/android/presplash.png

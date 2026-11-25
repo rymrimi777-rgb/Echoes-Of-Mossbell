@@ -1,17 +1,32 @@
 """
 Room Manager for 2-Player Online Multiplayer.
-Handles room creation, unique room code generation, atomic slot validation,
-rejection of third players, and room lifecycle management.
+Handles room creation, cryptographically random 10-char alphanumeric room codes,
+write-first atomic slot claims, rejection of third players, and room lifecycle management.
 
 Security:
-- Uses ETag conditional writes (If-Match) for atomic room creation and slot claims.
-- Validates character_id against the known character registry.
-- Clamps position data to valid map bounds.
+- Generates 10-char uppercase alphanumeric room IDs via Python's `secrets` module.
+- Uses ETag conditional writes (If-Match: null_etag) for atomic room creation and slot claims.
+- Does NOT read `/rooms/{roomId}` before claiming slot `p2` (prevents unauthorized waiting-room reads).
+- Validates character_id against the known character registry and clamps position data.
 - Verifies UID ownership before writing to any player slot.
 """
-import random
+import secrets
+import string
 import time
 from game.network.firebase_client import FirebaseClient
+
+ROOM_CODE_LENGTH = 10
+ROOM_CODE_ALPHABET = string.ascii_uppercase + string.digits
+_ROOM_CODE_CHARS = frozenset(ROOM_CODE_ALPHABET)
+
+
+def is_valid_room_id(room_id):
+    """Validates a 10-character uppercase alphanumeric room ID."""
+    if not isinstance(room_id, str):
+        return False
+    clean = room_id.strip().upper()
+    return len(clean) == ROOM_CODE_LENGTH and all(ch in _ROOM_CODE_CHARS for ch in clean)
+
 
 # Valid character IDs from the character registry
 VALID_CHARACTER_IDS = frozenset([
@@ -69,13 +84,13 @@ class RoomManager:
 
     @staticmethod
     def generate_room_code():
-        """Generates a clean 5-digit room ID (e.g. '58291') easily typed on mobile and PC."""
-        return str(random.randint(10000, 99999))
+        """Generates a cryptographically random 10-character uppercase alphanumeric Room ID."""
+        return "".join(secrets.choice(ROOM_CODE_ALPHABET) for _ in range(ROOM_CODE_LENGTH))
 
     def create_room(self, character_id, player_name="Player 1"):
         """
-        Creates a new room on Firebase Realtime Database using conditional ETag writes.
-        Assigns creator as Player 1 (p1).
+        Creates a new room on Firebase Realtime Database using conditional ETag writes
+        (If-Match: null_etag). Assigns creator as Player 1 (p1).
         Returns (success: bool, room_id_or_error: str).
         """
         if not self.client.auth.get_valid_token():
@@ -87,24 +102,8 @@ class RoomManager:
         character_id = _sanitize_character_id(character_id)
         last_error = "Could not generate a unique room code after retries"
 
-        for attempt in range(self.MAX_CREATE_RETRIES):
+        for _attempt in range(self.MAX_CREATE_RETRIES):
             room_id = self.generate_room_code()
-
-            # Check if room already exists AND request ETag (X-Firebase-ETag: true)
-            check_ok, existing, etag = self.client.get(f"rooms/{room_id}", with_etag=True)
-            if not check_ok:
-                err_str = str(existing or "")
-                last_error = err_str
-                if "Permission denied" in err_str:
-                    # Room may already exist & be active/closed -> treat as collision & retry
-                    continue
-                return False, f"CREATE_FAILED: {err_str}"
-
-            if existing is not None:
-                # Room code collision — retry with a different code
-                last_error = "ROOM_COLLISION"
-                continue
-
             now = time.time()
             room_data = {
                 "created_at": now,
@@ -127,13 +126,12 @@ class RoomManager:
                 }
             }
 
-            # Conditional PUT with ETag (null_etag when empty) to guarantee zero overwrites
-            cond_etag = etag if etag else "null_etag"
-            success, resp, _ = self.client.put(f"rooms/{room_id}", room_data, if_match=cond_etag)
+            # Direct conditional PUT with If-Match: null_etag (no prior GET needed)
+            success, resp, _ = self.client.put(f"rooms/{room_id}", room_data, if_match="null_etag")
             if not success:
                 last_error = str(resp)
-                if resp == "PRECONDITION_FAILED":
-                    # Another client created this room between our GET and PUT — retry
+                if resp == "PRECONDITION_FAILED" or "Permission denied" in last_error:
+                    # Existing room collision (412 from own ETag or 401 hiding another host's room) -> retry
                     continue
                 return False, f"CREATE_FAILED: {resp}"
 
@@ -148,11 +146,16 @@ class RoomManager:
 
     def join_room(self, room_id, character_id, player_name="Player 2"):
         """
-        Validates room, enforces 2-player limit, and conditionally claims slot p2 using ETags.
+        Write-first atomic join flow:
+        - Does NOT GET /rooms/{roomId} before claiming p2.
+        - Directly sends PUT /rooms/{roomId}/players/p2 with If-Match: null_etag.
+        - Firebase server rules validate room existence, waiting status, host connectivity,
+          host_uid != auth.uid, and empty p2 slot.
+        - Only after claiming p2 does it transition status -> playing and GET room data.
         Returns (success: bool, room_data_or_error: str/dict).
         """
-        clean_id = str(room_id).strip()
-        if not clean_id or not clean_id.isdigit() or len(clean_id) != 5:
+        clean_id = str(room_id).strip().upper()
+        if not is_valid_room_id(clean_id):
             return False, "INVALID_ROOM_ID"
 
         if not self.client.auth.get_valid_token():
@@ -163,50 +166,11 @@ class RoomManager:
         uid = self.client.auth.uid
         character_id = _sanitize_character_id(character_id)
 
-        # 1. Fetch room state
-        success, room_data, room_etag = self.client.get(f"rooms/{clean_id}", with_etag=True)
-        if not success:
-            if "Permission denied" in str(room_data):
-                # Active/closed rooms reject non-member reads
-                return False, "ROOM_FULL"
-            return False, f"JOIN_FAILED: {room_data}"
-        if not room_data:
-            return False, "ROOM_NOT_FOUND"
-
-        status = room_data.get("status")
-        if status == "closed":
-            return False, "ROOM_CLOSED"
-
-        players = room_data.get("players", {})
-
-        # 2. Check if p1 exists and is alive
-        p1 = players.get("p1")
-        if not p1 or not p1.get("connected"):
-            return False, "HOST_DISCONNECTED"
-
-        # 3. Prevent joining your own room
-        if p1.get("uid") == uid or room_data.get("host_uid") == uid:
+        # Prevent same RoomManager instance from joining its own hosted room
+        if self.current_room_id == clean_id and self.local_slot == "p1":
             return False, "CANNOT_JOIN_OWN_ROOM"
 
-        # 4. Strict 2-Player Limit: NEVER replace an occupied slot belonging to another UID
-        p2 = players.get("p2")
-        if p2 and p2.get("uid") != uid:
-            return False, "ROOM_FULL"
-        if status != "waiting" and (not p2 or p2.get("uid") != uid):
-            return False, "ROOM_FULL"
-
-        # 5. Fetch exact p2 slot ETag for atomic conditional write
-        ok_p2, existing_p2, p2_etag = self.client.get(f"rooms/{clean_id}/players/p2", with_etag=True)
-        if not ok_p2:
-            if "Permission denied" in str(existing_p2):
-                return False, "ROOM_FULL"
-            return False, f"CLAIM_FAILED: {existing_p2}"
-
-        if existing_p2 is not None and existing_p2.get("uid") != uid:
-            return False, "ROOM_FULL"
-
         now = time.time()
-        # 6. Atomic conditional claim of slot p2
         p2_data = {
             "uid": uid,
             "name": str(player_name)[:20],
@@ -220,22 +184,32 @@ class RoomManager:
             "map": "village"
         }
 
-        cond_etag = p2_etag if p2_etag else "null_etag"
+        # 1. Direct conditional PUT on players/p2 with If-Match: null_etag (NO prior GET!)
         claim_ok, claim_resp, _ = self.client.put(
-            f"rooms/{clean_id}/players/p2", p2_data,
-            if_match=cond_etag
+            f"rooms/{clean_id}/players/p2",
+            p2_data,
+            if_match="null_etag"
         )
         if not claim_ok:
-            if claim_resp == "PRECONDITION_FAILED" or "Permission denied" in str(claim_resp):
+            err_str = str(claim_resp)
+            if claim_resp == "PRECONDITION_FAILED":
                 return False, "ROOM_FULL"
-            return False, f"CLAIM_FAILED: {claim_resp}"
+            if "Permission denied" in err_str:
+                # Safe non-leaking rejection (does not expose room existence/status/host)
+                return False, "JOIN_DENIED"
+            return False, f"CLAIM_FAILED: {err_str}"
 
-        # 7. Transition room status to "playing" directly at /status
-        if status == "waiting":
-            status_ok, status_resp, _ = self.client.put(f"rooms/{clean_id}/status", "playing")
-            if not status_ok:
-                return False, f"STATUS_FAILED: {status_resp}"
+        # 2. Transition room status to "playing" directly at /status
+        status_ok, status_resp, _ = self.client.put(f"rooms/{clean_id}/status", "playing")
+        if not status_ok:
+            return False, f"STATUS_FAILED: {status_resp}"
 
+        # 3. Claim succeeded -> now read room data as an authorized member (p2)
+        read_ok, room_data, _ = self.client.get(f"rooms/{clean_id}")
+        if not read_ok or not room_data:
+            return False, f"JOIN_READ_FAILED: {room_data}"
+
+        p1 = room_data.get("players", {}).get("p1")
         self.current_room_id = clean_id
         self.local_slot = "p2"
         self.local_uid = uid

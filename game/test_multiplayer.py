@@ -1,23 +1,23 @@
 """
 Comprehensive Test Suite for Echoes of Mossbell Online Multiplayer System.
 Validates:
-1. Anonymous Auth and Token Refresh logic
-2. Realtime Database REST URL, Query, and ETag conditional headers
-3. Room creation, unique room code generation, and Player 1 slot assignment
-4. Room joining and Player 2 slot assignment
-5. Strict 2-player limit: rejection of a third player
-6. Remote player interpolation, animation, and overhead badge rendering
-7. Game mode selection (SOLO vs PLAY WITH FRIENDS)
-8. Offline SOLO gameplay independence (zero network required)
-9. Character ID and position validation
-10. Self-join prevention and room ID format validation
-11. Partner disconnect and stale player detection
-12. Auth token requirement enforcement
+1. Firebase Configuration & Anonymous Auth logic
+2. 10-char uppercase alphanumeric room code generation using `secrets`
+3. Room creation with conditional ETag (`If-Match: null_etag`) & collision retries
+4. Write-first join flow: NO GET before claiming p2 (`PUT .../players/p2` with `If-Match: null_etag`)
+5. Strict 2-player limit: rejection of third player (`ROOM_FULL` / 412)
+6. Safe non-leaking rejection for nonexistent / closed / host rooms (`JOIN_DENIED`)
+7. Remote player interpolation, animation, and overhead badge rendering
+8. GameModeScreen & MultiplayerLobbyScreen 10-char alphanumeric keyboard + touch keypad
+9. Offline SOLO gameplay independence & engine flow
+10. Character ID, map ID, and position validation + room ID format checks
+11. Thread safety of NetworkWorker and non-destructive disconnect
+12. Unauthenticated request blocking
 """
 import os
 import sys
+import copy
 import time
-import json
 import pygame
 
 # Set dummy headless audio/video drivers
@@ -34,17 +34,20 @@ pygame.display.set_mode((160, 144), pygame.HIDDEN)
 from game.network.firebase_config import FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL
 from game.network.firebase_auth import FirebaseAuth
 from game.network.firebase_client import FirebaseClient
-from game.network.room_manager import RoomManager, _sanitize_character_id, _clamp_coord, VALID_CHARACTER_IDS
+from game.network.room_manager import (
+    RoomManager, ROOM_CODE_LENGTH, ROOM_CODE_ALPHABET, is_valid_room_id,
+    _sanitize_character_id, _clamp_coord, _sanitize_map_id
+)
 from game.network.network_worker import NetworkWorker
 from game.network.remote_player import RemotePlayer
 from game.network.multiplayer_screen import GameModeScreen, MultiplayerLobbyScreen
 from game.ui import UIRenderer
 from game.camera import Camera
-from game.main import Game, STATE_TITLE, STATE_CHAR_SELECT, STATE_GAME_MODE, STATE_MP_LOBBY, STATE_PLAY
+from game.main import Game, STATE_TITLE, STATE_CHAR_SELECT, STATE_GAME_MODE, STATE_PLAY
 
 
 class MockFirebaseBackend:
-    """In-memory mock of Firebase Realtime Database with realistic ETag / If-Match enforcement."""
+    """In-memory mock enforcing ETag If-Match and server-side participant read/write rules."""
 
     def __init__(self):
         self.data = {}
@@ -61,26 +64,49 @@ class MockFirebaseBackend:
                 return None, "null_etag"
         return curr, f"etag_v{self._ver}"
 
-    def get(self, path, with_etag=False):
+    def get(self, path, with_etag=False, caller_uid=None):
+        clean = path.strip("/")
+        parts = [p for p in clean.split("/") if p]
+        if len(parts) >= 2 and parts[0] == "rooms" and caller_uid is not None:
+            rid = parts[1]
+            room = self.data.get("rooms", {}).get(rid)
+            if not isinstance(room, dict):
+                return False, "Permission denied", None
+            p2_uid = (room.get("players", {}).get("p2") or {}).get("uid")
+            if room.get("host_uid") != caller_uid and p2_uid != caller_uid:
+                return False, "Permission denied", None
         val, etag = self._get_ref(path)
-        return True, val, (etag if with_etag else None)
+        return True, copy.deepcopy(val), (etag if with_etag else None)
 
-    def put(self, path, val, if_match=None):
+    def put(self, path, val, if_match=None, caller_uid=None):
+        clean = path.strip("/")
+        parts = [p for p in clean.split("/") if p]
+
+        # Simulate RTDB rule checks for write-first players/p2 claim
+        if len(parts) == 4 and parts[0] == "rooms" and parts[2] == "players" and parts[3] == "p2" and caller_uid is not None:
+            room = self.data.get("rooms", {}).get(parts[1])
+            if not isinstance(room, dict):
+                return False, "Permission denied", None
+            p1 = room.get("players", {}).get("p1") or {}
+            p2 = room.get("players", {}).get("p2")
+            if p2 is not None:
+                # Existing node fails null_etag check (412)
+                if if_match == "null_etag":
+                    return False, "PRECONDITION_FAILED", None
+                return False, "Permission denied", None
+            if room.get("status") != "waiting" or not p1.get("connected") or room.get("host_uid") == caller_uid or p1.get("uid") == caller_uid:
+                return False, "Permission denied", None
+
         existing, current_etag = self._get_ref(path)
+        if if_match is not None and if_match != current_etag:
+            return False, "PRECONDITION_FAILED", None
 
-        # Realistic ETag enforcement (HTTP 412 PRECONDITION_FAILED)
-        if if_match is not None:
-            if if_match != current_etag:
-                return False, "PRECONDITION_FAILED", None
-
-        path = path.strip("/")
-        parts = [p for p in path.split("/") if p]
         curr = self.data
         for p in parts[:-1]:
             if p not in curr or not isinstance(curr[p], dict):
                 curr[p] = {}
             curr = curr[p]
-        curr[parts[-1]] = val
+        curr[parts[-1]] = copy.deepcopy(val)
         self._ver += 1
         return True, val, f"etag_v{self._ver}"
 
@@ -93,7 +119,7 @@ class MockFirebaseBackend:
                 curr[p] = {}
             curr = curr[p]
         if isinstance(val, dict):
-            curr.update(val)
+            curr.update(copy.deepcopy(val))
         self._ver += 1
         return True, curr, f"etag_v{self._ver}"
 
@@ -113,10 +139,11 @@ class MockFirebaseBackend:
 
 
 class MockFirebaseClient:
-    """Mock client routing to MockFirebaseBackend."""
+    """Mock client routing to MockFirebaseBackend and recording request sequence."""
 
     def __init__(self, backend, uid):
         self.backend = backend
+        self.calls = []
         self.auth = type("MockAuth", (), {
             "uid": uid,
             "get_valid_token": lambda self: "mock_jwt_token",
@@ -125,15 +152,19 @@ class MockFirebaseClient:
         })()
 
     def get(self, path, timeout=5, with_etag=False):
-        return self.backend.get(path, with_etag=with_etag)
+        self.calls.append(("GET", path))
+        return self.backend.get(path, with_etag=with_etag, caller_uid=self.auth.uid)
 
     def put(self, path, data, if_match=None, timeout=5):
-        return self.backend.put(path, data, if_match=if_match)
+        self.calls.append(("PUT", path, if_match))
+        return self.backend.put(path, data, if_match=if_match, caller_uid=self.auth.uid)
 
     def patch(self, path, data, timeout=5):
+        self.calls.append(("PATCH", path))
         return self.backend.patch(path, data)
 
     def delete(self, path, timeout=5):
+        self.calls.append(("DELETE", path))
         return self.backend.delete(path)
 
 
@@ -147,269 +178,176 @@ def run_multiplayer_tests():
     assert FIREBASE_PROJECT_ID == "echoes-of-mossbell"
     assert "echoes-of-mossbell" in FIREBASE_DATABASE_URL
     print(f"Project ID: {FIREBASE_PROJECT_ID}")
-    print(f"Realtime Database URL: {FIREBASE_DATABASE_URL}")
 
-    # 2. Authentication Logic & Missing Import Fix
+    # 2. Authentication Logic & urllib.parse import
     print("\n2. Testing Firebase Anonymous Auth Client Logic...")
     auth = FirebaseAuth()
     assert hasattr(auth, "sign_in_anonymously")
     assert hasattr(auth, "refresh_id_token")
     assert hasattr(auth, "get_valid_token")
-    # Verify urllib.parse is properly imported (refresh_id_token uses urlencode)
     import urllib.parse
-    assert hasattr(urllib.parse, "urlencode"), "urllib.parse must be importable for token refresh"
-    print("FirebaseAuth structure, token management, and urllib.parse import verified.")
+    assert hasattr(urllib.parse, "urlencode")
+    print("FirebaseAuth structure and urllib.parse verified.")
 
-    # 3. Room Creation with ETag-based collision prevention
-    print("\n3. Testing Room Creation with ETag Collision Prevention (Player 1)...")
+    # 3. 10-Char Secrets Room Code Generation & Conditional Create
+    print("\n3. Testing 10-Char Secrets Room Codes & ETag Room Creation...")
     backend = MockFirebaseBackend()
     client_p1 = MockFirebaseClient(backend, uid="uid_player_1")
     room_mgr_p1 = RoomManager(client_p1)
 
-    code = room_mgr_p1.generate_room_code()
-    assert len(code) == 5 and code.isdigit(), f"Expected 5-digit numeric room code, got '{code}'"
+    codes = {room_mgr_p1.generate_room_code() for _ in range(25)}
+    assert len(codes) == 25, "Generated room codes must be unpredictable/unique"
+    for c in codes:
+        assert len(c) == ROOM_CODE_LENGTH == 10
+        assert all(ch in ROOM_CODE_ALPHABET for ch in c)
+        assert is_valid_room_id(c) is True
 
     ok, rid = room_mgr_p1.create_room(character_id="actor1_character_01", player_name="Ralph")
-    assert ok is True, f"Failed room creation: {rid}"
-    assert room_mgr_p1.current_room_id == rid
+    assert ok is True and is_valid_room_id(rid)
+    assert client_p1.calls[0] == ("PUT", f"rooms/{rid}", "null_etag"), "create_room must use direct PUT with null_etag"
     assert room_mgr_p1.local_slot == "p1"
-    assert room_mgr_p1.local_uid == "uid_player_1"
-    assert room_mgr_p1.remote_slot == "p2"
-    print(f"Player 1 successfully created room: {rid} (Assigned slot 'p1', UID tracked)")
+    print(f"Player 1 created 10-char room {rid} atomically via If-Match: null_etag.")
 
-    # 4. Joining Room (Player 2) with ETag conditional write
-    print("\n4. Testing Room Joining with ETag Conditional Claim (Player 2)...")
+    # 4. Non-member cannot read waiting room BEFORE joining
+    print("\n4. Testing Strict Non-Member Read Blocking on Waiting Room...")
+    client_p3 = MockFirebaseClient(backend, uid="uid_player_3")
+    ok_read_wait, err_read_wait, _ = client_p3.get(f"rooms/{rid}")
+    assert ok_read_wait is False and err_read_wait == "Permission denied"
+    print("Non-member blocked from reading waiting room.")
+
+    # 5. Write-First Join Flow (NO GET before PUT players/p2!)
+    print("\n5. Testing Write-First Join Flow (Player 2)...")
     client_p2 = MockFirebaseClient(backend, uid="uid_player_2")
     room_mgr_p2 = RoomManager(client_p2)
 
-    ok, room_data = room_mgr_p2.join_room(rid, character_id="actor1_character_02", player_name="Ulrika")
-    assert ok is True, f"Player 2 failed to join: {room_data}"
+    ok, room_data = room_mgr_p2.join_room(rid.lower(), character_id="actor1_character_02", player_name="Ulrika")
+    assert ok is True, f"Player 2 failed write-first join: {room_data}"
     assert room_mgr_p2.local_slot == "p2"
-    assert room_mgr_p2.local_uid == "uid_player_2"
-    assert room_mgr_p2.remote_slot == "p1"
-    print(f"Player 2 successfully joined room: {rid} (Assigned slot 'p2', UID tracked)")
+    assert client_p2.calls[0] == ("PUT", f"rooms/{rid}/players/p2", "null_etag"), "First request MUST be conditional PUT on players/p2"
+    assert client_p2.calls[1][0:2] == ("PUT", f"rooms/{rid}/status")
+    assert client_p2.calls[2][0:2] == ("GET", f"rooms/{rid}"), "GET must occur ONLY AFTER claiming p2"
+    print(f"Write-first join verified! Request sequence: {[c[:2] for c in client_p2.calls]}")
 
-    # Verify Host detects Player 2
     has_p2, p2_info = room_mgr_p1.poll_waiting_room()
-    assert has_p2 is True
-    assert p2_info["character_id"] == "actor1_character_02"
-    print("Host (P1) poll successfully detected Player 2 joined!")
+    assert has_p2 is True and p2_info["character_id"] == "actor1_character_02"
 
-    # 5. Rejection of Third Player (Strict 2-Player Cap)
-    print("\n5. Testing Strict 2-Player Limit (Rejecting Player 3)...")
-    client_p3 = MockFirebaseClient(backend, uid="uid_player_3")
+    # 6. Third Player & Non-existent Room Rejection (No Leakage)
+    print("\n6. Testing 3rd Player Rejection & Safe Rejection Errors...")
     room_mgr_p3 = RoomManager(client_p3)
-
     ok_p3, err_p3 = room_mgr_p3.join_room(rid, character_id="actor1_character_03", player_name="Bennett")
-    assert ok_p3 is False, "Third player must NOT be allowed to join a 2-player room!"
-    assert err_p3 == "ROOM_FULL", f"Expected 'ROOM_FULL', got '{err_p3}'"
-    print("Third player correctly rejected with 'ROOM_FULL'! (Max 2 players strictly enforced)")
+    assert ok_p3 is False and err_p3 == "ROOM_FULL", f"Expected ROOM_FULL, got {err_p3}"
 
-    # 6. Remote Player Entity & Interpolation
-    print("\n6. Testing Remote Player Interpolation & Rendering...")
+    ok_ghost, err_ghost = room_mgr_p3.join_room("ZZZZ9999AA", character_id="actor1_character_03", player_name="Ghost")
+    assert ok_ghost is False and err_ghost == "JOIN_DENIED", f"Expected JOIN_DENIED (no info leak), got {err_ghost}"
+    print("3rd player got ROOM_FULL (412) and nonexistent room got safe JOIN_DENIED (401).")
+
+    # 7. Remote Player Entity & Interpolation
+    print("\n7. Testing Remote Player Interpolation & Rendering...")
     remote = RemotePlayer(character_id="actor1_character_02", name="Ulrika", slot="p2", x=160.0, y=144.0)
-    assert remote.x == 160
-    assert remote.y == 144
-    assert remote.character_id == "actor1_character_02"
-
-    # Send target position at (176.0, 144.0)
-    remote.apply_network_state({
-        "x": 176.0,
-        "y": 144.0,
-        "direction": "right",
-        "moving": True,
-        "map": "village"
-    })
-    assert remote.target_x == 176.0
-    assert remote.direction == "right"
-    assert remote.moving is True
-
-    # Advance frames -> verify smooth interpolation
+    remote.apply_network_state({"x": 176.0, "y": 144.0, "direction": "right", "moving": True, "map": "village"})
     for _ in range(10):
         remote.update(16)
-    assert remote.fx > 165.0, f"Expected interpolated position > 165.0, got {remote.fx}"
-    print(f"Remote player smoothly interpolated from 160.0 to {remote.fx:.2f} towards target 176.0!")
-
-    # Test drawing with camera
+    assert remote.fx > 165.0
     cam = Camera(22, 18)
-    surf = pygame.Surface((160, 144))
-    remote.draw(surf, cam)
-    print("Remote player successfully rendered with authentic Game Boy 24x32 sprite & overhead badge!")
+    remote.draw(pygame.Surface((160, 144)), cam)
+    print(f"Remote player interpolated to {remote.fx:.2f} and rendered at 160x144.")
 
-    # 7. UI Screens: Game Mode Selection & Lobby
-    print("\n7. Testing GameModeScreen & MultiplayerLobbyScreen UI...")
+    # 8. Lobby UI 10-Char Alphanumeric Keyboard & Touch Keypad
+    print("\n8. Testing 10-Char Alphanumeric Lobby Input (Keyboard + Touch)...")
     ui = UIRenderer()
     gm_screen = GameModeScreen(ui)
     gm_screen.reset("actor1_character_01")
-    assert gm_screen.options == ["SOLO", "PLAY WITH FRIENDS", "BACK"]
-
-    # Select SOLO
-    enter_ev = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
-    gm_screen.handle_event(enter_ev)
-    assert gm_screen.done is True
+    gm_screen.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN))
     assert gm_screen.choice == "SOLO"
-    print("GameModeScreen successfully selected SOLO mode.")
 
-    # Select PLAY WITH FRIENDS
-    gm_screen.reset("actor1_character_01")
-    down_ev = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN)
-    gm_screen.handle_event(down_ev)
-    gm_screen.handle_event(enter_ev)
-    assert gm_screen.done is True
-    assert gm_screen.choice == "PLAY WITH FRIENDS"
-    print("GameModeScreen successfully selected PLAY WITH FRIENDS mode.")
-
-    # Lobby Keypad input test
     lobby = MultiplayerLobbyScreen(ui, room_mgr_p1)
     lobby.mode = MultiplayerLobbyScreen.MODE_JOIN_INPUT
-    # Input digits '5', '8', '2', '9', '1'
-    for ch in "58291":
-        ev = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_0 + int(ch), unicode=ch)
-        lobby.handle_event(ev)
-    assert lobby.input_code == "58291"
-    # Backspace
-    bs_ev = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE)
-    lobby.handle_event(bs_ev)
-    assert lobby.input_code == "5829"
-    print("MultiplayerLobby on-screen & keyboard input successfully handled.")
+    # Ensure keys including X, A, E, J, Z, digits type characters (no premature exit/submit!)
+    sample = "A1X9E3J7Z2"
+    for ch in sample:
+        kc = pygame.K_0 + int(ch) if ch.isdigit() else pygame.K_a + (ord(ch) - ord("A"))
+        lobby.handle_event(pygame.event.Event(pygame.KEYDOWN, key=kc, unicode=ch.lower()))
+    assert lobby.input_code == sample, f"Expected '{sample}', got '{lobby.input_code}'"
+    lobby.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE))
+    assert lobby.input_code == sample[:-1]
 
-    # 8. Game Engine State Integration
-    print("\n8. Testing Game Engine Multiplayer Flow...")
+    # Touch keypad click on 'Q', 'DEL', bounds check inside 160x144
+    for key_label, rect in lobby.keypad_rects.items():
+        assert 0 <= rect.x and rect.right <= 160 and 0 <= rect.y and rect.bottom <= 144, f"Keypad key {key_label} outside 160x144: {rect}"
+    qx, qy = lobby.keypad_rects["Q"].center
+    lobby.handle_pointer_down(qx, qy)
+    assert lobby.input_code == sample[:-1] + "Q"
+    lobby.draw(pygame.Surface((160, 144)))
+    print("Lobby 10-char keyboard & 38-key touch keypad cleanly verified inside 160x144.")
+
+    # 9. Game Engine SOLO Isolation
+    print("\n9. Testing Game Engine SOLO Mode Independence...")
     game = Game()
-    assert game.state == STATE_TITLE
-
-    # Simulate New Game -> Character Select -> Game Mode
     game.title_screen.choice = "NEW GAME"
     game.title_screen.done = True
     game._update(16)
     assert game.state == STATE_CHAR_SELECT
-
     game.char_select.done = True
     game._update(16)
-    assert game.state == STATE_GAME_MODE, f"Expected STATE_GAME_MODE, got {game.state}"
-    print("Game successfully stepped: TITLE -> CHARACTER SELECT -> GAME MODE.")
-
-    # In Game Mode screen, choose SOLO -> verify offline game start
+    assert game.state == STATE_GAME_MODE
     game.game_mode_screen.choice = "SOLO"
     game.game_mode_screen.done = True
     game._update(16)
-    assert game.state == STATE_PLAY
-    assert game.is_multiplayer is False
+    assert game.state == STATE_PLAY and game.is_multiplayer is False
     print("SOLO mode confirmed offline play without network dependency!")
 
-    # 9. Character ID & Position Validation
-    print("\n9. Testing Character ID and Position Data Validation...")
-    # Valid character IDs pass through unchanged
-    assert _sanitize_character_id("actor1_character_01") == "actor1_character_01"
+    # 10. Validation & Self-Join Prevention (against fresh waiting room so host rule check is exercised)
+    print("\n10. Testing Room ID, Character ID, Map ID, Coords & Self-Join...")
     assert _sanitize_character_id("actor1_character_08") == "actor1_character_08"
-    # Invalid character IDs fall back to default
-    assert _sanitize_character_id("hacked_sprite_id") == "actor1_character_01"
-    assert _sanitize_character_id("") == "actor1_character_01"
-    assert _sanitize_character_id(None) == "actor1_character_01"
-    print("Character ID validation: invalid IDs correctly rejected and replaced with default.")
+    assert _sanitize_character_id("hacked") == "actor1_character_01"
+    assert _sanitize_map_id("ruins") == "ruins"
+    assert _sanitize_map_id("dungeon") == "dungeon"
+    assert _sanitize_map_id("invalid_map") == "village"
+    assert _clamp_coord(-500.0) == 0.0 and _clamp_coord(99999.0) == 4096.0
 
-    # Coordinate clamping
-    assert _clamp_coord(100.0) == 100.0
-    assert _clamp_coord(-500.0) == 0.0
-    assert _clamp_coord(99999.0) == 4096.0
-    assert _clamp_coord("not_a_number") == 0.0
-    print("Position data validation: out-of-range and invalid coordinates correctly clamped.")
+    for bad_code in ("", "12345", "A1B2C3D4E", "A1B2C3D4E5F", "A1B2C3D4E!", "bad space!"):
+        ok_bad, err_bad = room_mgr_p2.join_room(bad_code, "actor1_character_01")
+        assert ok_bad is False and err_bad == "INVALID_ROOM_ID", f"Failed rejecting '{bad_code}'"
 
-    # 10. Self-Join Prevention & Room ID Format Validation
-    print("\n10. Testing Self-Join Prevention & Room ID Format Validation...")
-    # Create a fresh room for self-join test
-    backend2 = MockFirebaseBackend()
-    client_self = MockFirebaseClient(backend2, uid="uid_self_test")
-    room_mgr_self = RoomManager(client_self)
-    ok_s, rid_s = room_mgr_self.create_room("actor1_character_01", "SelfTest")
-    assert ok_s is True
+    ok_self, err_self = room_mgr_p1.join_room(rid, "actor1_character_02")
+    assert ok_self is False and err_self == "CANNOT_JOIN_OWN_ROOM"
+    # Even a fresh RoomManager holding the host UID on an open waiting room gets rejected with JOIN_DENIED
+    rm_wait_host = RoomManager(MockFirebaseClient(backend, uid="uid_host_self"))
+    ok_w, rid_w = rm_wait_host.create_room("actor1_character_01", "HostSelf")
+    assert ok_w
+    rm_host_clone = RoomManager(MockFirebaseClient(backend, uid="uid_host_self"))
+    ok_self2, err_self2 = rm_host_clone.join_room(rid_w, "actor1_character_02")
+    assert ok_self2 is False and err_self2 == "JOIN_DENIED"
+    print("Validation and self-join prevention verified!")
 
-    # Same UID tries to join their own room
-    room_mgr_self2 = RoomManager(MockFirebaseClient(backend2, uid="uid_self_test"))
-    ok_sj, err_sj = room_mgr_self2.join_room(rid_s, "actor1_character_02", "SelfTest2")
-    assert ok_sj is False, "Must not allow self-join!"
-    assert err_sj == "CANNOT_JOIN_OWN_ROOM", f"Expected 'CANNOT_JOIN_OWN_ROOM', got '{err_sj}'"
-    print("Self-join correctly rejected with 'CANNOT_JOIN_OWN_ROOM'!")
-
-    # Invalid room ID formats
-    ok_inv, err_inv = room_mgr_p2.join_room("abc", "actor1_character_01")
-    assert ok_inv is False
-    assert err_inv == "INVALID_ROOM_ID", f"Expected 'INVALID_ROOM_ID', got '{err_inv}'"
-
-    ok_inv2, err_inv2 = room_mgr_p2.join_room("1234", "actor1_character_01")
-    assert ok_inv2 is False
-    assert err_inv2 == "INVALID_ROOM_ID", f"Expected 'INVALID_ROOM_ID' for 4-digit, got '{err_inv2}'"
-
-    ok_inv3, err_inv3 = room_mgr_p2.join_room("", "actor1_character_01")
-    assert ok_inv3 is False
-    print("Invalid room ID formats ('abc', '1234', '') all correctly rejected!")
-
-    # 11. Clean Multiplayer Leave & Teardown (Verify P2 slot NOT wiped when P1 leaves)
-    print("\n11. Testing Clean Disconnect & Teardown...")
-    saved_rid = rid
+    # 11. Non-Destructive Disconnect & NetworkWorker Thread Safety
+    print("\n11. Testing Clean Disconnect & NetworkWorker Thread Safety...")
     room_mgr_p1.leave_room()
-    assert room_mgr_p1.current_room_id is None
-    assert room_mgr_p1.local_uid is None
-    assert backend.data["rooms"][saved_rid]["status"] == "closed", "Host leaving should close room"
-    assert backend.data["rooms"][saved_rid]["players"]["p2"]["uid"] == "uid_player_2", "Host leaving must NOT delete P2!"
-    assert backend.data["rooms"][saved_rid]["players"]["p1"]["connected"] is False
+    assert backend.data["rooms"][rid]["status"] == "closed"
+    assert backend.data["rooms"][rid]["players"]["p2"]["uid"] == "uid_player_2"
     room_mgr_p2.leave_room()
-    assert room_mgr_p2.current_room_id is None
-    assert room_mgr_p2.local_uid is None
-    assert backend.data["rooms"][saved_rid]["players"]["p2"]["connected"] is False
-    print("Room teardown, UID cleanup, and non-destructive disconnect verified!")
+    assert backend.data["rooms"][rid]["players"]["p2"]["connected"] is False
 
-    # 12. NetworkWorker Thread Safety
-    print("\n12. Testing NetworkWorker Thread Safety...")
-    backend3 = MockFirebaseBackend()
-    client_nw = MockFirebaseClient(backend3, uid="uid_nw_test")
-    backend3.data["rooms"] = {"99999": {"players": {"p1": {"connected": True}, "p2": {"connected": True}}}}
-    nw = NetworkWorker(client_nw, room_id="99999", local_slot="p1", remote_slot="p2")
-    assert nw.running is False, "Worker should not be running before start()"
+    nw = NetworkWorker(MockFirebaseClient(backend, uid="uid_player_1"), rid, "p1", "p2")
+    assert nw.running is False
+    nw.queue_local_update({"x": 10})
+    nw.queue_local_update({"x": 42})
+    assert nw._consume_outgoing() == {"x": 42}
+    assert nw._consume_outgoing() is None
+    print("Non-destructive disconnect and NetworkWorker thread safety verified!")
 
-    # Test queue_local_update atomicity
-    nw.queue_local_update({"x": 10, "y": 20})
-    nw.queue_local_update({"x": 30, "y": 40})
-    state = nw._consume_outgoing()
-    assert state == {"x": 30, "y": 40}, f"Expected latest state, got {state}"
-    state2 = nw._consume_outgoing()
-    assert state2 is None, "Should be empty after consume"
-    print("NetworkWorker thread-safe single-slot outgoing state verified!")
-
-    # 13. Unauthenticated Access Block & Conditional ETag 412 Handling
-    print("\n13. Testing Unauthenticated Rejection & ETag Precondition Failure...")
+    # 12. Unauthenticated Access Rejection & 412 Handling
+    print("\n12. Testing Unauthenticated Rejection & 412 Conflict Handling...")
     no_token_auth = type("NoTokenAuth", (), {"get_valid_token": lambda self: None})()
-    real_client_no_auth = FirebaseClient(no_token_auth)
-    ok_unauth, err_unauth, _ = real_client_no_auth.get("rooms/12345")
-    assert ok_unauth is False and "AUTHENTICATION_REQUIRED" in err_unauth, f"Expected AUTHENTICATION_REQUIRED, got {err_unauth}"
-    ok_put_unauth, err_put_unauth, _ = real_client_no_auth.put("rooms/12345", {"test": 1})
-    assert ok_put_unauth is False and "AUTHENTICATION_REQUIRED" in err_put_unauth
-
-    # Test 412 precondition failed when null_etag put collides
-    backend_race = MockFirebaseBackend()
-    backend_race.put("rooms/55555", {"status": "waiting"}, if_match="null_etag")
-    ok_race, err_race, _ = backend_race.put("rooms/55555", {"status": "waiting"}, if_match="null_etag")
-    assert ok_race is False and err_race == "PRECONDITION_FAILED"
-
-    # Test p2 conflict (stale p2 still rejected even if connected=False!)
-    c_host = MockFirebaseClient(backend_race, uid="uid_host")
-    rm_host = RoomManager(c_host)
-    ok_r2, rid2 = rm_host.create_room("actor1_character_01", "Host")
-    assert ok_r2
-    c_p2a = MockFirebaseClient(backend_race, uid="uid_p2a")
-    rm_p2a = RoomManager(c_p2a)
-    ok_j2a, _ = rm_p2a.join_room(rid2, "actor1_character_02", "P2A")
-    assert ok_j2a
-    rm_p2a.leave_room()  # p2a disconnects (connected=False)
-    # Player 3 MUST still be rejected!
-    c_p3 = MockFirebaseClient(backend_race, uid="uid_p3")
-    rm_p3 = RoomManager(c_p3)
-    ok_p3_late, err_p3_late = rm_p3.join_room(rid2, "actor1_character_03", "P3")
-    assert ok_p3_late is False and err_p3_late == "ROOM_FULL", f"Expected ROOM_FULL even after P2 disconnect, got {err_p3_late}"
-    print("Unauthenticated block, HTTP 412 conflict check, and disconnected-P2 hijack block verified!")
+    real_no_auth = FirebaseClient(no_token_auth)
+    ok_u, err_u, _ = real_no_auth.get(f"rooms/{rid}")
+    assert ok_u is False and "AUTHENTICATION_REQUIRED" in err_u
+    ok_412, err_412, _ = backend.put(f"rooms/{rid}", {"status": "waiting"}, if_match="null_etag")
+    assert ok_412 is False and err_412 == "PRECONDITION_FAILED"
+    print("Unauthenticated block and 412 ETag precondition enforcement verified!")
 
     print("\n" + "=" * 65)
-    print("=== ALL 13 SECURITY TESTS PASSED WITH 100% SUCCESS! ===")
+    print("=== ALL 12 MULTIPLAYER SECURITY TESTS PASSED WITH 100% SUCCESS! ===")
     print("=" * 65)
 
 

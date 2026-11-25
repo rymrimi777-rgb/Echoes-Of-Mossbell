@@ -2,11 +2,11 @@
   "rules": {
     "rooms": {
       "$roomId": {
-        ".read": "auth != null && (data.child('host_uid').val() === auth.uid || data.child('players/p2/uid').val() === auth.uid || !data.exists() || (data.child('status').val() === 'waiting' && !data.child('players/p2').exists()))",
+        ".read": "auth != null && (!data.exists() || data.child('host_uid').val() === auth.uid || data.child('players/p2/uid').val() === auth.uid)",
 
         ".write": "auth != null && !data.exists() && newData.exists()",
 
-        ".validate": "$roomId.matches(/^[0-9]{5}$/) && newData.hasChildren(['created_at', 'host_uid', 'status', 'max_players']) && (data.exists() || (newData.child('players/p1').exists() && !newData.child('players/p2').exists() && newData.child('status').val() === 'waiting'))",
+        ".validate": "$roomId.matches(/^[A-Z0-9]{10}$/) && newData.hasChildren(['created_at', 'host_uid', 'status', 'max_players']) && (data.exists() || (newData.child('players/p1').exists() && !newData.child('players/p2').exists() && newData.child('status').val() === 'waiting'))",
 
         "created_at": {
           ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val())"
@@ -63,6 +63,7 @@
           },
 
           "p2": {
+            ".read": "auth != null && !data.exists() && data.parent().parent().exists() && data.parent().parent().child('status').val() === 'waiting' && data.parent().parent().child('host_uid').val() !== auth.uid",
             ".write": "auth != null && ((!data.exists() && newData.exists() && data.parent().parent().exists() && data.parent().parent().child('status').val() === 'waiting' && data.parent().parent().child('host_uid').val() !== auth.uid && data.parent().child('p1').exists() && data.parent().child('p1/uid').val() !== auth.uid && data.parent().child('p1/connected').val() === true) || (data.exists() && data.child('uid').val() === auth.uid && (newData.exists() || data.parent().parent().child('status').val() !== 'waiting')))",
             ".validate": "newData.hasChildren(['uid', 'character_id', 'x', 'y', 'connected'])",
 
