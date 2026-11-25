@@ -44,7 +44,7 @@ icon.filename = assets/android/icon.png
 presplash.filename = assets/android/presplash.png
 
 # (list) Permissions
-android.permissions = WAKE_LOCK
+android.permissions = WAKE_LOCK,INTERNET
 
 # (int) Target Android API
 android.api = 34

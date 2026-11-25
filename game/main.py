@@ -26,6 +26,10 @@ from game.ui import (UIRenderer, TitleScreen, PauseMenu, InventoryScreen,
                      QuestScreen, TransitionEffect, NotificationPopup)
 from game.character_select import CharacterSelectScreen
 from game.character_registry import get_character, get_default_character_id
+from game.network import (
+    FirebaseAuth, FirebaseClient, RoomManager, NetworkWorker,
+    RemotePlayer, GameModeScreen, MultiplayerLobbyScreen
+)
 from game.touch_controls import TouchController
 from game.fonts import font_tag
 from game.map_loader import update_tile_animators
@@ -34,6 +38,8 @@ from game.world import build_all_maps
 # States
 STATE_TITLE       = "title"
 STATE_CHAR_SELECT = "char_select"
+STATE_GAME_MODE   = "game_mode"
+STATE_MP_LOBBY    = "mp_lobby"
 STATE_PLAY        = "play"
 STATE_PAUSE       = "pause"
 STATE_DIALOGUE    = "dialogue"
@@ -93,6 +99,17 @@ class Game:
         self.view_scale = 1.0
         self.view_offset = (0, 0)
 
+        # Multiplayer & Network Systems
+        self.firebase_auth = FirebaseAuth()
+        self.firebase_client = FirebaseClient(self.firebase_auth)
+        self.room_mgr = RoomManager(self.firebase_client)
+        self.game_mode_screen = GameModeScreen(self.ui)
+        self.mp_lobby_screen = MultiplayerLobbyScreen(self.ui, self.room_mgr)
+
+        self.is_multiplayer = False
+        self.network_worker = None
+        self.remote_player = None
+
         # NPC Animators
         self.npc_animators = {}
         self._load_npc_animators()
@@ -108,6 +125,57 @@ class Game:
         self.running = True
 
         self.audio.play_music("stg01 - Title Screen.mp3")
+
+    def _start_multiplayer_session(self):
+        """Starts an active online 2-player multiplayer session."""
+        self.is_multiplayer = True
+        rid = self.room_mgr.current_room_id
+        local_slot = self.room_mgr.local_slot
+        remote_slot = self.room_mgr.remote_slot
+        rem_info = self.room_mgr.remote_player_info or {}
+
+        rem_char = rem_info.get("character_id", "actor1_character_02")
+        rem_name = rem_info.get("name", "Player 2" if local_slot == "p1" else "Player 1")
+        rem_x = float(rem_info.get("x", 176.0 if local_slot == "p1" else 160.0))
+        rem_y = float(rem_info.get("y", 144.0))
+
+        # Start solo-style world
+        self._new_game(character_id=self.player.character_id)
+        if local_slot == "p2":
+            self.player.fx = 176.0
+            self.player.x = 176
+
+        # Initialize Remote Player
+        self.remote_player = RemotePlayer(
+            character_id=rem_char,
+            name=rem_name,
+            slot=remote_slot,
+            x=rem_x,
+            y=rem_y
+        )
+
+        # Launch background network worker thread
+        self.network_worker = NetworkWorker(
+            self.firebase_client,
+            room_id=rid,
+            local_slot=local_slot,
+            remote_slot=remote_slot
+        )
+        self.network_worker.start()
+
+        self.state = STATE_PLAY
+        self.notification.show(f"Online Room {rid} Active! Joined as {local_slot.upper()}")
+        self.audio.play_sfx("menu_select", "ui")
+
+    def _stop_multiplayer(self):
+        """Cleanly ends a multiplayer session and stops the worker thread."""
+        if self.is_multiplayer:
+            if self.network_worker:
+                self.network_worker.stop()
+                self.network_worker = None
+            self.room_mgr.leave_room()
+            self.remote_player = None
+            self.is_multiplayer = False
 
     def window_to_native(self, wx, wy):
         """Converts window/screen pixel coordinates to native 160x144 Game Boy space."""
@@ -488,6 +556,18 @@ class Game:
                     self.char_select.handle_pointer_down(nx, ny, audio_mgr=self.audio)
                 else:
                     self.char_select.handle_event(event, audio_mgr=self.audio)
+            elif self.state == STATE_GAME_MODE:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    nx, ny = self.window_to_native(*event.pos)
+                    self.game_mode_screen.handle_pointer_down(nx, ny, audio_mgr=self.audio)
+                else:
+                    self.game_mode_screen.handle_event(event, audio_mgr=self.audio)
+            elif self.state == STATE_MP_LOBBY:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    nx, ny = self.window_to_native(*event.pos)
+                    self.mp_lobby_screen.handle_pointer_down(nx, ny, audio_mgr=self.audio)
+                else:
+                    self.mp_lobby_screen.handle_event(event, audio_mgr=self.audio)
             elif self.state == STATE_PLAY:
                 if event.type == pygame.KEYDOWN:
                     if event.key in KEYS_PAUSE:
@@ -601,6 +681,34 @@ class Game:
                 dummy_esc = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
                 self.char_select.handle_event(dummy_esc, audio_mgr=self.audio)
 
+        elif self.state == STATE_GAME_MODE:
+            if self.touch_ctrl.consume_up():
+                dummy = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_UP)
+                self.game_mode_screen.handle_event(dummy, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_down():
+                dummy = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN)
+                self.game_mode_screen.handle_event(dummy, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_a() or self.touch_ctrl.consume_start():
+                dummy_enter = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+                self.game_mode_screen.handle_event(dummy_enter, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_b() or self.touch_ctrl.consume_select():
+                dummy_esc = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+                self.game_mode_screen.handle_event(dummy_esc, audio_mgr=self.audio)
+
+        elif self.state == STATE_MP_LOBBY:
+            if self.touch_ctrl.consume_up():
+                dummy = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_UP)
+                self.mp_lobby_screen.handle_event(dummy, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_down():
+                dummy = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN)
+                self.mp_lobby_screen.handle_event(dummy, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_a() or self.touch_ctrl.consume_start():
+                dummy_enter = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+                self.mp_lobby_screen.handle_event(dummy_enter, audio_mgr=self.audio)
+            elif self.touch_ctrl.consume_b() or self.touch_ctrl.consume_select():
+                dummy_esc = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+                self.mp_lobby_screen.handle_event(dummy_esc, audio_mgr=self.audio)
+
     def _update(self, dt_ms):
         self.touch_ctrl.update(dt_ms)
         self.notification.update(dt_ms)
@@ -632,6 +740,7 @@ class Game:
                     self.title_screen.done = False
                     self.audio.play_sfx("menu_select", "ui")
                 elif choice == "QUIT":
+                    self._stop_multiplayer()
                     self.running = False
 
         elif self.state == STATE_CHAR_SELECT:
@@ -642,8 +751,8 @@ class Game:
                     self.save_sys.save_selected_character(chosen_id)
                     self.player.set_character(chosen_id)
                     if self.char_select_origin == "new_game":
-                        self._new_game(character_id=chosen_id)
-                        self.state = STATE_PLAY
+                        self.game_mode_screen.reset(chosen_id)
+                        self.state = STATE_GAME_MODE
                         self.audio.play_sfx("menu_select", "ui")
                     else:
                         self.state = STATE_TITLE
@@ -654,10 +763,59 @@ class Game:
                     self.title_screen.done = False
                     self.audio.play_sfx("menu_cancel", "ui")
 
+        elif self.state == STATE_GAME_MODE:
+            self.game_mode_screen.update(dt_ms)
+            if self.game_mode_screen.done:
+                choice = self.game_mode_screen.choice
+                if choice == "SOLO":
+                    self.is_multiplayer = False
+                    self._new_game(character_id=self.player.character_id)
+                    self.state = STATE_PLAY
+                    self.audio.play_sfx("menu_select", "ui")
+                elif choice == "PLAY WITH FRIENDS":
+                    self.mp_lobby_screen.reset(character_id=self.player.character_id)
+                    self.state = STATE_MP_LOBBY
+                    self.audio.play_sfx("menu_select", "ui")
+                elif choice == "BACK":
+                    self.char_select.reset(self.player.character_id)
+                    self.state = STATE_CHAR_SELECT
+                    self.audio.play_sfx("menu_cancel", "ui")
+
+        elif self.state == STATE_MP_LOBBY:
+            self.mp_lobby_screen.update(dt_ms)
+            if self.mp_lobby_screen.session_ready and self.mp_lobby_screen.done:
+                self._start_multiplayer_session()
+            elif self.mp_lobby_screen.canceled and self.mp_lobby_screen.done:
+                self.game_mode_screen.reset(self.player.character_id)
+                self.state = STATE_GAME_MODE
+                self.audio.play_sfx("menu_cancel", "ui")
+
         elif self.state == STATE_PLAY:
             self.play_time += dt_ms / 1000.0
             self.player.update(dt_ms, self.current_map.collision, touch_ctrl=self.touch_ctrl, audio_mgr=self.audio)
             self.camera.update(self.player.center_x, self.player.center_y)
+
+            # Multiplayer Synchronization
+            if self.is_multiplayer and self.network_worker:
+                rem_updates = self.network_worker.get_remote_updates()
+                if rem_updates and self.remote_player:
+                    self.remote_player.apply_network_state(rem_updates[-1])
+
+                if self.remote_player:
+                    self.remote_player.update(dt_ms)
+
+                for ev_type, ev_data in self.network_worker.get_events():
+                    if ev_type in (NetworkWorker.EVENT_PLAYER_LEFT, NetworkWorker.EVENT_DISCONNECTED):
+                        self.notification.show("Partner disconnected!")
+
+                self.network_worker.queue_local_update({
+                    "character_id": self.player.character_id,
+                    "x": self.player.x,
+                    "y": self.player.y,
+                    "direction": self.player.direction,
+                    "moving": self.player.moving,
+                    "map": self.current_map_id
+                })
 
             # NPCs idle animation
             for npc_id, anim in self.npc_animators.items():
@@ -706,6 +864,7 @@ class Game:
                     self._save_game()
                     self.state = STATE_PLAY
                 elif choice == "QUIT":
+                    self._stop_multiplayer()
                     self.running = False
                 self.pause_menu.done = False
 
@@ -733,6 +892,12 @@ class Game:
         elif self.state == STATE_CHAR_SELECT:
             self.char_select.draw(self.native)
 
+        elif self.state == STATE_GAME_MODE:
+            self.game_mode_screen.draw(self.native)
+
+        elif self.state == STATE_MP_LOBBY:
+            self.mp_lobby_screen.draw(self.native)
+
         elif self.state in (STATE_PLAY, STATE_PAUSE, STATE_DIALOGUE, STATE_TRANSITION):
             # Draw world layers
             self.current_map.draw_ground(self.native, self.camera)
@@ -759,6 +924,10 @@ class Game:
                         render_items.append((enemy.y + enemy.fh, "enemy", enemy, None))
 
             render_items.append((self.player.y, "player", self.player, None))
+
+            if self.is_multiplayer and self.remote_player and self.remote_player.current_map == self.current_map_id:
+                render_items.append((self.remote_player.y, "remote_player", self.remote_player, None))
+
             render_items.sort(key=lambda it: it[0])
 
             for y_pos, kind, entity, anim in render_items:
@@ -774,6 +943,8 @@ class Game:
                     sx, sy = self.camera.apply(draw_x, draw_y)
                     self.native.blit(frame, (sx, sy))
                 elif kind == "enemy":
+                    entity.draw(self.native, self.camera)
+                elif kind == "remote_player":
                     entity.draw(self.native, self.camera)
                 else:
                     self.player.draw(self.native, self.camera)

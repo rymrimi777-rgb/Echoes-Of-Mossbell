@@ -139,8 +139,14 @@ def run_character_selection_tests():
     game.char_select.handle_event(enter_ev)
     assert game.char_select.done is True
 
-    # Advance game loop to process confirmation
+    # Advance game loop to process confirmation -> transitions to Game Mode screen
     game._update(16)
+    if game.state == "game_mode":
+        # Select SOLO
+        game.game_mode_screen.choice = "SOLO"
+        game.game_mode_screen.done = True
+        game._update(16)
+
     assert game.state == STATE_PLAY, f"Expected STATE_PLAY, got {game.state}"
     assert game.player.character_id == "actor1_character_08", (
         f"Expected player character_id 'actor1_character_08', got {game.player.character_id}"
